@@ -31,7 +31,7 @@ OBJS+=$(OBJDIR)/i_sound_alsa.o
 CC=$(CROSS_COMPILE)gcc  # gcc or g++
 CFLAGS+=-ggdb3 -Os
 LDFLAGS+=-Wl,--gc-sections
-CFLAGS+=-ggdb3 -Wall -DNORMALUNIX -DLINUX -DFBDEV_ALSA
+CFLAGS+=-std=gnu99 -ggdb3 -Wall -DNORMALUNIX -DLINUX -DFBDEV_ALSA
 LIBS+=-lm -lc -lasound
 
 # Keep backend object files separate so changing BACKEND never mixes objects.
