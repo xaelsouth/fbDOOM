@@ -33,6 +33,11 @@ For the X11 desktop test backend, install the Xlib development files and run:
 * make BACKEND=x11
 * ./fbdoom-x11 -scale 3
 
+Pass `-flashlight` to add a player-centered dynamic light. Nearby walls,
+planes, and sprites receive a stronger existing palette colormap; the
+effect falls off with distance. It is opt-in and uses the software
+renderer, with no PXP dependency.
+
 The renderer remains at 320x200; presentation maps it to a corrected 4:3
 display image (320x240) using nearest-neighbor sampling. The default fits
 that image to the output while preserving aspect ratio and centering bars.
