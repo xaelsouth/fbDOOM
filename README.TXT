@@ -64,12 +64,14 @@ fills the active framebuffer using the same aspect-preserving fit; pass
 `-stretch` to fill non-4:3 displays or `-scaling N` to limit the image to
 an N-times 320x240 region.
 
-In fbdev mode, the executable needs read access to keyboard and mouse
-devices under `/dev/input/event*` and read/write access to `/dev/fb0`.
-Add the user to the system's input/video groups or configure suitable
-device permissions. X11 mode uses the active X server and needs no direct
-evdev device access. If ALSA's default playback device is not the desired
-output, set `ALSA_PCM_DEVICE` to an ALSA PCM name before starting the game.
+In fbdev mode, the executable needs read access to a keyboard device under
+`/dev/input/event*` and read/write access to `/dev/fb0`; mouse input is
+optional. Standard keyboards and limited keypads such as ADC keys are
+accepted when they expose at least one key Doom recognizes. Add the user to
+the system's input/video groups or configure suitable device permissions.
+X11 mode uses the active X server and needs no direct evdev device access.
+If ALSA's default playback device is not the desired output, set
+`ALSA_PCM_DEVICE` to an ALSA PCM name before starting the game.
 
 The game renders internally at 320x200; the selected viewport scales that
 image without changing the renderer's native resolution.

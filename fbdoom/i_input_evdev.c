@@ -372,6 +372,7 @@ static boolean DeviceCapabilities(int fd, boolean *keyboard, boolean *mouse)
     unsigned long ev_bits[(EV_MAX + BITS_PER_LONG) / BITS_PER_LONG] = {0};
     unsigned long key_bits[(KEY_MAX + BITS_PER_LONG) / BITS_PER_LONG] = {0};
     unsigned long rel_bits[(REL_MAX + BITS_PER_LONG) / BITS_PER_LONG] = {0};
+    unsigned int code;
 
     if (ioctl(fd, EVIOCGBIT(0, sizeof(ev_bits)), ev_bits) < 0)
     {
@@ -394,9 +395,18 @@ static boolean DeviceCapabilities(int fd, boolean *keyboard, boolean *mouse)
         }
     }
 
-    *keyboard = TEST_BIT(EV_KEY, ev_bits)
-             && TEST_BIT(KEY_A, key_bits)
-             && TEST_BIT(LINUX_KEY_ENTER, key_bits);
+    *keyboard = false;
+    if (TEST_BIT(EV_KEY, ev_bits))
+    {
+        for (code = 0; code <= KEY_MAX; ++code)
+        {
+            if (TEST_BIT(code, key_bits) && TranslateKey(code) != 0)
+            {
+                *keyboard = true;
+                break;
+            }
+        }
+    }
     *mouse = TEST_BIT(EV_REL, ev_bits)
           && TEST_BIT(REL_X, rel_bits)
           && TEST_BIT(REL_Y, rel_bits)
