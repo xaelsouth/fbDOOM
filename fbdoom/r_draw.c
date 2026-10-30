@@ -24,6 +24,8 @@
 #include "doomdef.h"
 #include "deh_main.h"
 
+#include <limits.h>
+
 #include "i_system.h"
 #include "z_zone.h"
 #include "w_wad.h"
@@ -75,11 +77,91 @@ byte		translations[3][256];
 static byte *background_buffer = NULL;
 
 
+static byte brightmap_palette[256];
+static byte translucency_map[256 * 256];
+
+void R_InitBrightmaps (void)
+{
+    byte *palette = W_CacheLumpName("PLAYPAL", PU_CACHE);
+    int i;
+
+    for (i = 0; i < 256; ++i)
+    {
+	int red = palette[i * 3];
+	int green = palette[i * 3 + 1];
+	int blue = palette[i * 3 + 2];
+	int maximum = red > green ? red : green;
+	int minimum = red < green ? red : green;
+	int luminance;
+
+	if (blue > maximum)
+	    maximum = blue;
+	if (blue < minimum)
+	    minimum = blue;
+
+	luminance = (red * 77 + green * 150 + blue * 29) >> 8;
+	brightmap_palette[i] =
+	    luminance >= 144 && (maximum - minimum >= 48 || luminance >= 208);
+    }
+}
+
+const byte *R_BrightmapForTexture(int texnum)
+{
+    if (brightmaps_enabled && !fixedcolormap
+     && R_IsBrightmapTexture(texnum))
+	return brightmap_palette;
+
+    return NULL;
+}
+
+void R_InitTranslucency (void)
+{
+    byte *palette = W_CacheLumpName("PLAYPAL", PU_CACHE);
+    int source;
+
+    for (source = 0; source < 256; ++source)
+    {
+	int background;
+
+	for (background = 0; background < 256; ++background)
+	{
+	    int red = (palette[source * 3] + palette[background * 3] + 1) / 2;
+	    int green = (palette[source * 3 + 1]
+	               + palette[background * 3 + 1] + 1) / 2;
+	    int blue = (palette[source * 3 + 2]
+	              + palette[background * 3 + 2] + 1) / 2;
+	    int best_difference = INT_MAX;
+	    int best_color = 0;
+	    int candidate;
+
+	    for (candidate = 0; candidate < 256; ++candidate)
+	    {
+		int red_difference = red - palette[candidate * 3];
+		int green_difference = green - palette[candidate * 3 + 1];
+		int blue_difference = blue - palette[candidate * 3 + 2];
+		int difference = red_difference * red_difference
+		               + green_difference * green_difference
+		               + blue_difference * blue_difference;
+
+		if (difference < best_difference)
+		{
+		    best_difference = difference;
+		    best_color = candidate;
+		}
+	    }
+
+	    translucency_map[(source << 8) | background] = best_color;
+	}
+    }
+}
+
+
 //
 // R_DrawColumn
 // Source is the top of the column to scale.
 //
 lighttable_t*		dc_colormap; 
+const byte*		dc_brightmap;
 int			dc_x; 
 int			dc_yl; 
 int			dc_yh; 
@@ -105,6 +187,7 @@ void R_DrawColumn (void)
     byte*		dest; 
     fixed_t		frac;
     fixed_t		fracstep;	 
+    byte		source;
  
     count = dc_yh - dc_yl; 
 
@@ -132,16 +215,25 @@ void R_DrawColumn (void)
     // Inner loop that does the actual texture mapping,
     //  e.g. a DDA-lile scaling.
     // This is as fast as it gets.
-    do 
+    if (dc_brightmap != NULL)
     {
-	// Re-map color indices from wall texture column
-	//  using a lighting/special effects LUT.
-	*dest = dc_colormap[dc_source[(frac>>FRACBITS)&127]];
-	
-	dest += SCREENWIDTH; 
-	frac += fracstep;
-	
-    } while (count--); 
+	do
+	{
+	    source = dc_source[(frac >> FRACBITS) & 127];
+	    *dest = dc_brightmap[source] ? source : dc_colormap[source];
+	    dest += SCREENWIDTH;
+	    frac += fracstep;
+	} while (count--);
+    }
+    else
+    {
+	do
+	{
+	    *dest = dc_colormap[dc_source[(frac>>FRACBITS)&127]];
+	    dest += SCREENWIDTH;
+	    frac += fracstep;
+	} while (count--);
+    }
 } 
 
 
@@ -239,14 +331,76 @@ void R_DrawColumnLow (void)
     fracstep = dc_iscale; 
     frac = dc_texturemid + (dc_yl-centery)*fracstep;
     
-    do 
+    if (dc_brightmap != NULL)
     {
-	// Hack. Does not work corretly.
-	*dest2 = *dest = dc_colormap[dc_source[(frac>>FRACBITS)&127]];
+	do
+	{
+	    byte source = dc_source[(frac >> FRACBITS) & 127];
+	    byte pixel = dc_brightmap[source] ? source : dc_colormap[source];
+	    *dest2 = *dest = pixel;
+	    dest += SCREENWIDTH;
+	    dest2 += SCREENWIDTH;
+	    frac += fracstep;
+	} while (count--);
+    }
+    else
+    {
+	do
+	{
+	    *dest2 = *dest = dc_colormap[dc_source[(frac>>FRACBITS)&127]];
+	    dest += SCREENWIDTH;
+	    dest2 += SCREENWIDTH;
+	    frac += fracstep;
+	} while (count--);
+    }
+}
+
+void R_DrawTranslucentColumn (void)
+{
+    int count = dc_yh - dc_yl;
+    byte *dest;
+    fixed_t frac;
+    fixed_t fracstep = dc_iscale;
+
+    if (count < 0)
+	return;
+
+    dest = ylookup[dc_yl] + columnofs[dc_x];
+    frac = dc_texturemid + (dc_yl - centery) * fracstep;
+
+    do
+    {
+	byte source = dc_colormap[dc_source[(frac >> FRACBITS) & 127]];
+	*dest = translucency_map[(source << 8) | *dest];
+	dest += SCREENWIDTH;
+	frac += fracstep;
+    } while (count--);
+}
+
+void R_DrawTranslucentColumnLow (void)
+{
+    int count = dc_yh - dc_yl;
+    int x = dc_x << 1;
+    byte *dest;
+    byte *dest2;
+    fixed_t frac;
+    fixed_t fracstep = dc_iscale;
+
+    if (count < 0)
+	return;
+
+    dest = ylookup[dc_yl] + columnofs[x];
+    dest2 = ylookup[dc_yl] + columnofs[x + 1];
+    frac = dc_texturemid + (dc_yl - centery) * fracstep;
+
+    do
+    {
+	byte source = dc_colormap[dc_source[(frac >> FRACBITS) & 127]];
+	*dest = translucency_map[(source << 8) | *dest];
+	*dest2 = translucency_map[(source << 8) | *dest2];
 	dest += SCREENWIDTH;
 	dest2 += SCREENWIDTH;
-	frac += fracstep; 
-
+	frac += fracstep;
     } while (count--);
 }
 

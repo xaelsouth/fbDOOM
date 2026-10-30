@@ -47,5 +47,6 @@ int R_FlatNumForName (char* name);
 // returns the texture number for the texture name.
 int R_TextureNumForName (char *name);
 int R_CheckTextureNumForName (char *name);
+int R_IsBrightmapTexture (int texnum);
 
 #endif

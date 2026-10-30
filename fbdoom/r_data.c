@@ -155,6 +155,30 @@ byte**			texturecomposite;
 int*		flattranslation;
 int*		texturetranslation;
 
+int R_IsBrightmapTexture (int texnum)
+{
+    static const char bright_texture_names[][8] = {
+	"COMP2", "COMPSPAN", "COMPSTA1", "COMPSTA2", "COMPTALL",
+	"COMPTILE", "COMPUTE1", "COMPUTE2", "COMPUTE3",
+	"LITE2", "LITE3", "LITE4", "LITE5",
+	"LITEBLU1", "LITEBLU2", "LITEBLU3", "LITEBLU4"
+    };
+    unsigned int i;
+
+    if (texnum < 0 || texnum >= numtextures)
+	return false;
+
+    for (i = 0; i < sizeof(bright_texture_names)
+                    / sizeof(bright_texture_names[0]); ++i)
+    {
+	if (memcmp(textures[texnum]->name, bright_texture_names[i], 8) == 0)
+	    return true;
+    }
+
+    return false;
+}
+
+
 // needed for pre rendering
 fixed_t*	spritewidth;	
 fixed_t*	spriteoffset;
@@ -906,7 +930,6 @@ void R_PrecacheLevel (void)
 
     Z_Free(spritepresent);
 }
-
 
 
 

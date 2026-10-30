@@ -400,11 +400,11 @@ R_DrawVisSprite
     patch = W_CacheLumpNum (vis->patch+firstspritelump, PU_CACHE);
 
     dc_colormap = vis->colormap;
+    dc_brightmap = NULL;
     
-    if (!dc_colormap)
+    if (vis->mobjflags & MF_SHADOW)
     {
-	// NULL colormap = shadow draw
-	colfunc = fuzzcolfunc;
+	colfunc = translucent_shadows ? tlcolfunc : fuzzcolfunc;
     }
     else if (vis->mobjflags & MF_TRANSLATION)
     {
@@ -569,8 +569,23 @@ void R_ProjectSprite (mobj_t* thing)
     // get light level
     if (thing->flags & MF_SHADOW)
     {
-	// shadow draw
-	vis->colormap = NULL;
+	if (translucent_shadows && fixedcolormap)
+	{
+	    vis->colormap = fixedcolormap;
+	}
+	else if (translucent_shadows)
+	{
+	    index = xscale>>(LIGHTSCALESHIFT-detailshift);
+
+	    if (index >= MAXLIGHTSCALE)
+		index = MAXLIGHTSCALE-1;
+
+	    vis->colormap = R_FlashlightColormap(spritelights[index], tz);
+	}
+	else
+	{
+	    vis->colormap = NULL;
+	}
     }
     else if (fixedcolormap)
     {
@@ -977,5 +992,3 @@ void R_DrawMasked (void)
     if (!viewangleoffset)		
 	R_DrawPlayerSprites ();
 }
-
-

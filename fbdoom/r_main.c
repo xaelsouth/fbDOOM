@@ -106,22 +106,19 @@ lighttable_t*		zlight[LIGHTLEVELS][MAXLIGHTZ];
 int			extralight;			
 
 static boolean		flashlight_enabled;
+boolean			brightmaps_enabled;
+boolean			translucent_shadows;
 
 int R_FlashlightBoost (fixed_t distance)
 {
     if (!flashlight_enabled || distance <= 0)
 	return 0;
 
-    if (distance < 64 * FRACUNIT)
-	return 8;
-    if (distance < 128 * FRACUNIT)
-	return 6;
-    if (distance < 256 * FRACUNIT)
-	return 4;
-    if (distance < 512 * FRACUNIT)
-	return 2;
+    if (distance >= 512 * FRACUNIT)
+	return 0;
 
-    return 0;
+    return (int) ((8LL * (512 * (long long) FRACUNIT - distance))
+                  / (512LL * FRACUNIT));
 }
 
 lighttable_t *R_FlashlightColormap (lighttable_t *colormap,
@@ -154,6 +151,7 @@ void (*colfunc) (void);
 void (*basecolfunc) (void);
 void (*fuzzcolfunc) (void);
 void (*transcolfunc) (void);
+void (*tlcolfunc) (void);
 void (*spanfunc) (void);
 
 
@@ -744,6 +742,7 @@ void R_ExecuteSetViewSize (void)
 	colfunc = basecolfunc = R_DrawColumn;
 	fuzzcolfunc = R_DrawFuzzColumn;
 	transcolfunc = R_DrawTranslatedColumn;
+	tlcolfunc = R_DrawTranslucentColumn;
 	spanfunc = R_DrawSpan;
     }
     else
@@ -751,6 +750,7 @@ void R_ExecuteSetViewSize (void)
 	colfunc = basecolfunc = R_DrawColumnLow;
 	fuzzcolfunc = R_DrawFuzzColumnLow;
 	transcolfunc = R_DrawTranslatedColumnLow;
+	tlcolfunc = R_DrawTranslucentColumnLow;
 	spanfunc = R_DrawSpanLow;
     }
 
@@ -811,8 +811,14 @@ void R_ExecuteSetViewSize (void)
 void R_Init (void)
 {
     flashlight_enabled = M_CheckParm("-flashlight") > 0;
+    brightmaps_enabled = M_CheckParm("-brightmaps") > 0;
+    translucent_shadows = M_CheckParm("-translucent") > 0;
 
     R_InitData ();
+    if (brightmaps_enabled)
+	R_InitBrightmaps ();
+    if (translucent_shadows)
+	R_InitTranslucency ();
     printf (".");
     R_InitPointToAngle ();
     printf (".");

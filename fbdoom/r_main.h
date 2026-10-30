@@ -131,6 +131,11 @@ R_PointToDist
 int R_FlashlightBoost (fixed_t distance);
 lighttable_t *R_FlashlightColormap (lighttable_t *colormap,
                                     fixed_t distance);
+void R_InitBrightmaps (void);
+void R_InitTranslucency (void);
+extern boolean brightmaps_enabled;
+extern boolean translucent_shadows;
+extern void (*tlcolfunc) (void);
 
 fixed_t R_ScaleFromGlobalAngle (angle_t visangle);
 

@@ -24,6 +24,8 @@
 
 
 extern lighttable_t*	dc_colormap;
+extern const byte*	dc_brightmap;
+const byte *R_BrightmapForTexture(int texnum);
 extern int		dc_x;
 extern int		dc_yl;
 extern int		dc_yh;
@@ -49,6 +51,8 @@ void 	R_DrawFuzzColumnLow (void);
 //  Green/Red/Blue/Indigo shirts.
 void	R_DrawTranslatedColumn (void);
 void	R_DrawTranslatedColumnLow (void);
+void	R_DrawTranslucentColumn (void);
+void	R_DrawTranslucentColumnLow (void);
 
 void
 R_VideoErase

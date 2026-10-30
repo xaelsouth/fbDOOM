@@ -38,6 +38,12 @@ planes, and sprites receive a stronger existing palette colormap; the
 effect falls off with distance. It is opt-in and uses the software
 renderer, with no PXP dependency.
 
+`-brightmaps` keeps selected bright pixels in computer and light wall
+textures unshaded. `-translucent` draws spectre/invisibility shadows as
+50% palette translucency instead of the classic fuzz effect. Both options
+are disabled by default; translucency builds its palette blend table once
+at startup.
+
 The renderer remains at 320x200; presentation maps it to a corrected 4:3
 display image (320x240) using nearest-neighbor sampling. The default fits
 that image to the output while preserving aspect ratio and centering bars.

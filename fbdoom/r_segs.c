@@ -170,6 +170,7 @@ R_RenderMaskedSegRange
 			
 	    sprtopscreen = centeryfrac - FixedMul(dc_texturemid, spryscale);
 	    dc_iscale = 0xffffffffu / (unsigned)spryscale;
+	    dc_brightmap = R_BrightmapForTexture(texnum);
 	    
 	    // draw the texture
 	    col = (column_t *)( 
@@ -282,6 +283,7 @@ void R_RenderSegLoop (void)
 	    dc_yh = yh;
 	    dc_texturemid = rw_midtexturemid;
 	    dc_source = R_GetColumn(midtexture,texturecolumn);
+	    dc_brightmap = R_BrightmapForTexture(midtexture);
 	    colfunc ();
 	    ceilingclip[rw_x] = viewheight;
 	    floorclip[rw_x] = -1;
@@ -304,6 +306,7 @@ void R_RenderSegLoop (void)
 		    dc_yh = mid;
 		    dc_texturemid = rw_toptexturemid;
 		    dc_source = R_GetColumn(toptexture,texturecolumn);
+		    dc_brightmap = R_BrightmapForTexture(toptexture);
 		    colfunc ();
 		    ceilingclip[rw_x] = mid;
 		}
@@ -334,6 +337,7 @@ void R_RenderSegLoop (void)
 		    dc_texturemid = rw_bottomtexturemid;
 		    dc_source = R_GetColumn(bottomtexture,
 					    texturecolumn);
+		    dc_brightmap = R_BrightmapForTexture(bottomtexture);
 		    colfunc ();
 		    floorclip[rw_x] = mid;
 		}
