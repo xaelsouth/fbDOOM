@@ -30,7 +30,9 @@ rcsid[] = "$Id: i_x.c,v 1.6 1997/02/03 22:45:10 b1 Exp $";
 #include "m_argv.h"
 #include "d_event.h"
 #include "d_main.h"
+#include "i_system.h"
 #include "i_video.h"
+#include "i_video_scaling.h"
 #include "z_zone.h"
 
 #include "tables.h"
@@ -38,6 +40,7 @@ rcsid[] = "$Id: i_x.c,v 1.6 1997/02/03 22:45:10 b1 Exp $";
 
 #include <stdbool.h>
 #include <stdlib.h>
+#include <string.h>
 #include <unistd.h>
 #include <fcntl.h>
 
@@ -47,11 +50,17 @@ rcsid[] = "$Id: i_x.c,v 1.6 1997/02/03 22:45:10 b1 Exp $";
 #include <sys/socket.h>
 #include <linux/fb.h>
 #include <sys/ioctl.h>
+#include <errno.h>
+#include <stdint.h>
 
-//#define CMAP256
+extern void I_ShutdownInput(void);
 
 struct fb_var_screeninfo fb = {};
-int fb_scaling = 1;
+static struct fb_fix_screeninfo fb_fix;
+static video_viewport_t viewport;
+static boolean stretch_to_fill;
+static unsigned int bytes_per_pixel;
+static size_t output_buffer_size;
 int usemouse = 0;
 
 struct color {
@@ -99,68 +108,47 @@ int mouse_threshold = 10;
 
 int usegamma = 0;
 
-typedef struct
+static uint32_t FramebufferPixel(struct color color)
 {
-	byte r;
-	byte g;
-	byte b;
-} col_t;
+    uint32_t pixel = 0;
 
-// Palette converted to RGB565
-
-static uint16_t rgb565_palette[256];
-
-void cmap_to_rgb565(uint16_t * out, uint8_t * in, int in_pixels)
-{
-    int i, j;
-    struct color c;
-    uint16_t r, g, b;
-
-    for (i = 0; i < in_pixels; i++)
+    if (fb.red.length > 0 && fb.red.length <= 8)
     {
-        c = colors[*in]; 
-        r = ((uint16_t)(c.r >> 3)) << 11;
-        g = ((uint16_t)(c.g >> 2)) << 5;
-        b = ((uint16_t)(c.b >> 3)) << 0;
-        *out = (r | g | b);
-
-        in++;
-        for (j = 0; j < fb_scaling; j++) {
-            out++;
-        }
+        pixel |= (uint32_t) (color.r >> (8 - fb.red.length))
+               << fb.red.offset;
     }
+    if (fb.green.length > 0 && fb.green.length <= 8)
+    {
+        pixel |= (uint32_t) (color.g >> (8 - fb.green.length))
+               << fb.green.offset;
+    }
+    if (fb.blue.length > 0 && fb.blue.length <= 8)
+    {
+        pixel |= (uint32_t) (color.b >> (8 - fb.blue.length))
+               << fb.blue.offset;
+    }
+
+    return pixel;
 }
 
-void cmap_to_fb(uint8_t * out, uint8_t * in, int in_pixels)
+static void StorePixel(unsigned char *destination, uint32_t pixel)
 {
-    int i, j, k;
-    struct color c;
-    uint32_t pix;
-    uint16_t r, g, b;
+    unsigned int byte;
 
-    for (i = 0; i < in_pixels; i++)
+    for (byte = 0; byte < bytes_per_pixel; ++byte)
     {
-        c = colors[*in];  /* R:8 G:8 B:8 format! */
-        r = (uint16_t)(c.r >> (8 - fb.red.length));
-        g = (uint16_t)(c.g >> (8 - fb.green.length));
-        b = (uint16_t)(c.b >> (8 - fb.blue.length));
-        pix = r << fb.red.offset;
-        pix |= g << fb.green.offset;
-        pix |= b << fb.blue.offset;
-
-        for (k = 0; k < fb_scaling; k++) {
-            for (j = 0; j < fb.bits_per_pixel/8; j++) {
-                *out = (pix >> (j*8));
-                out++;
-            }
-        }
-        in++;
+        destination[byte] = pixel >> (byte * 8);
     }
 }
 
 void I_InitGraphics (void)
 {
-    int i;
+    int scale_arg;
+    int area_width = 0;
+    int area_height = 0;
+    int area_x = 0;
+    int area_y = 0;
+    int requested_scale = 0;
 
     /* Open fbdev file descriptor */
     fd_fb = open("/dev/fb0", O_RDWR);
@@ -171,7 +159,12 @@ void I_InitGraphics (void)
     }
 
     /* fetch framebuffer info */
-    ioctl(fd_fb, FBIOGET_VSCREENINFO, &fb);
+    if (ioctl(fd_fb, FBIOGET_VSCREENINFO, &fb) < 0
+     || ioctl(fd_fb, FBIOGET_FSCREENINFO, &fb_fix) < 0)
+    {
+        I_Error("Cannot query framebuffer information: %s", strerror(errno));
+        return;
+    }
     /* change params if needed */
     //ioctl(fd_fb, FBIOPUT_VSCREENINFO, &fb);
     printf("I_InitGraphics: framebuffer: x_res: %d, y_res: %d, x_virtual: %d, y_virtual: %d, bpp: %d, grayscale: %d\n",
@@ -183,22 +176,64 @@ void I_InitGraphics (void)
     printf("I_InitGraphics: DOOM screen size: w x h: %d x %d\n", SCREENWIDTH, SCREENHEIGHT);
 
 
-    i = M_CheckParmWithArgs("-scaling", 1);
-    if (i > 0) {
-        i = atoi(myargv[i + 1]);
-        fb_scaling = i;
-        printf("I_InitGraphics: Scaling factor: %d\n", fb_scaling);
-    } else {
-        fb_scaling = fb.xres / SCREENWIDTH;
-        if (fb.yres / SCREENHEIGHT < fb_scaling)
-            fb_scaling = fb.yres / SCREENHEIGHT;
-        printf("I_InitGraphics: Auto-scaling factor: %d\n", fb_scaling);
+    if ((fb.bits_per_pixel != 16 && fb.bits_per_pixel != 24
+      && fb.bits_per_pixel != 32)
+     || fb_fix.line_length < fb.xres * (fb.bits_per_pixel / 8))
+    {
+        I_Error("Unsupported framebuffer format: %u bpp, line length %u",
+                fb.bits_per_pixel, fb_fix.line_length);
+        return;
     }
 
+    bytes_per_pixel = fb.bits_per_pixel / 8;
+    stretch_to_fill = M_CheckParm("-stretch") > 0;
+    scale_arg = M_CheckParmWithArgs("-scaling", 1);
+    if (scale_arg > 0)
+    {
+        requested_scale = atoi(myargv[scale_arg + 1]);
+        if (requested_scale <= 0)
+        {
+            I_Error("-scaling must be a positive integer");
+            return;
+        }
+
+        area_width = SCREENWIDTH * requested_scale;
+        area_height = (SCREENHEIGHT * 6 / 5) * requested_scale;
+        if (area_width > (int) fb.xres)
+        {
+            area_width = fb.xres;
+        }
+        if (area_height > (int) fb.yres)
+        {
+            area_height = fb.yres;
+        }
+        area_x = (fb.xres - area_width) / 2;
+        area_y = (fb.yres - area_height) / 2;
+    }
+    else
+    {
+        area_width = fb.xres;
+        area_height = fb.yres;
+    }
+
+    if (!I_CalculateVideoViewport(area_width, area_height, stretch_to_fill,
+                                  &viewport))
+    {
+        I_Error("Cannot calculate framebuffer output scaling");
+        return;
+    }
+    viewport.x += area_x;
+    viewport.y += area_y;
 
     /* Allocate screen to draw to */
-	I_VideoBuffer = (byte*)Z_Malloc (SCREENWIDTH * SCREENHEIGHT, PU_STATIC, NULL);  // For DOOM to draw on
-	I_VideoBuffer_FB = (byte*)malloc(fb.xres * fb.yres * (fb.bits_per_pixel/8));     // For a single write() syscall to fbdev
+	I_VideoBuffer = (byte*)Z_Malloc (SCREENWIDTH * SCREENHEIGHT, PU_STATIC, NULL);
+	output_buffer_size = (size_t) fb.xres * fb.yres * bytes_per_pixel;
+	I_VideoBuffer_FB = calloc(1, output_buffer_size);
+	if (I_VideoBuffer_FB == NULL)
+	{
+	    I_Error("Cannot allocate framebuffer output buffer");
+	    return;
+	}
 
 	screenvisible = true;
 
@@ -208,8 +243,14 @@ void I_InitGraphics (void)
 
 void I_ShutdownGraphics (void)
 {
+	I_ShutdownInput();
 	Z_Free (I_VideoBuffer);
-	free(I_VideoBuffer_FB);
+	free (I_VideoBuffer_FB);
+	if (fd_fb >= 0)
+	{
+	    close(fd_fb);
+	    fd_fb = -1;
+	}
 }
 
 void I_StartFrame (void)
@@ -403,47 +444,93 @@ void I_UpdateNoBlit (void)
 void I_FinishUpdate (void)
 {
     int y;
-    int x_offset, y_offset, x_offset_end;
-    unsigned char *line_in, *line_out;
+    int output_bytes = fb.xres * bytes_per_pixel;
 
-    /* Offsets in case FB is bigger than DOOM */
-    /* 600 = fb heigt, 200 screenheight */
-    /* 600 = fb heigt, 200 screenheight */
-    /* 2048 =fb width, 320 screenwidth */
-    y_offset     = (((fb.yres - (SCREENHEIGHT * fb_scaling)) * fb.bits_per_pixel/8)) / 2;
-    x_offset     = (((fb.xres - (SCREENWIDTH  * fb_scaling)) * fb.bits_per_pixel/8)) / 2; // XXX: siglent FB hack: /4 instead of /2, since it seems to handle the resolution in a funny way
-    //x_offset     = 0;
-    x_offset_end = ((fb.xres - (SCREENWIDTH  * fb_scaling)) * fb.bits_per_pixel/8) - x_offset;
+    memset(I_VideoBuffer_FB, 0, output_buffer_size);
 
-    /* DRAW SCREEN */
-    line_in  = (unsigned char *) I_VideoBuffer;
-    line_out = (unsigned char *) I_VideoBuffer_FB;
-
-    y = SCREENHEIGHT;
-
-    while (y--)
+    for (y = 0; y < viewport.height; ++y)
     {
-        int i;
-        for (i = 0; i < fb_scaling; i++) {
-            line_out += x_offset;
-#ifdef CMAP256
-            for (fb_scaling == 1) {
-                memcpy(line_out, line_in, SCREENWIDTH); /* fb_width is bigger than Doom SCREENWIDTH... */
-            } else {
-                //XXX FIXME fb_scaling support!
-            }
-#else
-            //cmap_to_rgb565((void*)line_out, (void*)line_in, SCREENWIDTH);
-            cmap_to_fb((void*)line_out, (void*)line_in, SCREENWIDTH);
-#endif
-            line_out += (SCREENWIDTH * fb_scaling * (fb.bits_per_pixel/8)) + x_offset_end;
+        int source_y = I_MapOutputToSource(y, viewport.height, SCREENHEIGHT);
+        unsigned char *output_line =
+            I_VideoBuffer_FB + (viewport.y + y) * output_bytes;
+        int x;
+
+        for (x = 0; x < viewport.width; ++x)
+        {
+            int source_x = I_MapOutputToSource(x, viewport.width, SCREENWIDTH);
+            unsigned int destination_x = viewport.x + x;
+            size_t source_offset =
+                (size_t) source_y * SCREENWIDTH + source_x;
+
+            StorePixel(output_line + destination_x * bytes_per_pixel,
+                       FramebufferPixel(colors[I_VideoBuffer[source_offset]]));
         }
-        line_in += SCREENWIDTH;
     }
 
-    /* Start drawing from y-offset */
-    lseek(fd_fb, y_offset * fb.xres, SEEK_SET);
-    write(fd_fb, I_VideoBuffer_FB, (SCREENHEIGHT * fb_scaling * (fb.bits_per_pixel/8)) * fb.xres); /* draw only portion used by doom + x-offsets */
+    if (fb_fix.line_length == (unsigned int) output_bytes
+     && fb.xoffset == 0
+     && fb.yoffset == 0)
+    {
+        size_t bytes_to_write = (size_t) output_bytes * fb.yres;
+        size_t written = 0;
+
+        if (lseek(fd_fb, 0, SEEK_SET) < 0)
+        {
+            I_Error("Cannot seek framebuffer: %s", strerror(errno));
+            return;
+        }
+        while (written < bytes_to_write)
+        {
+            ssize_t count = write(fd_fb, I_VideoBuffer_FB + written,
+                                  bytes_to_write - written);
+
+            if (count < 0 && errno == EINTR)
+            {
+                continue;
+            }
+            if (count <= 0)
+            {
+                I_Error("Cannot write framebuffer: %s",
+                        count == 0 ? "short write" : strerror(errno));
+                return;
+            }
+            written += (size_t) count;
+        }
+    }
+    else
+    {
+        for (y = 0; y < (int) fb.yres; ++y)
+        {
+            size_t written = 0;
+            off_t offset = (off_t) (y + fb.yoffset) * fb_fix.line_length
+                         + (off_t) fb.xoffset * bytes_per_pixel;
+
+            if (lseek(fd_fb, offset, SEEK_SET) < 0)
+            {
+                I_Error("Cannot seek framebuffer: %s", strerror(errno));
+                return;
+            }
+            while (written < (size_t) output_bytes)
+            {
+                ssize_t count = write(fd_fb,
+                                      I_VideoBuffer_FB
+                                      + (size_t) y * output_bytes + written,
+                                      output_bytes - written);
+
+                if (count < 0 && errno == EINTR)
+                {
+                    continue;
+                }
+                if (count <= 0)
+                {
+                    I_Error("Cannot write framebuffer: %s",
+                            count == 0 ? "short write" : strerror(errno));
+                    return;
+                }
+                written += (size_t) count;
+            }
+        }
+    }
 }
 
 //
@@ -499,22 +586,15 @@ int I_GetPaletteIndex (int r, int g, int b)
 {
     int best, best_diff, diff;
     int i;
-    col_t color;
-
-    printf("I_GetPaletteIndex\n");
 
     best = 0;
     best_diff = INT_MAX;
 
     for (i = 0; i < 256; ++i)
     {
-    	color.r = GFX_RGB565_R(rgb565_palette[i]);
-    	color.g = GFX_RGB565_G(rgb565_palette[i]);
-    	color.b = GFX_RGB565_B(rgb565_palette[i]);
-
-        diff = (r - color.r) * (r - color.r)
-             + (g - color.g) * (g - color.g)
-             + (b - color.b) * (b - color.b);
+        diff = (r - colors[i].r) * (r - colors[i].r)
+             + (g - colors[i].g) * (g - colors[i].g)
+             + (b - colors[i].b) * (b - colors[i].b);
 
         if (diff < best_diff)
         {

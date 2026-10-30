@@ -15,6 +15,54 @@ To build (example):
 * cd fbdoom
 * make CROSS_COMPILE=arm-linux-gnueabihf-
 
+Linux framebuffer backend
+=========================
+
+The fbdoom build uses direct Linux framebuffer/evdev or native X11
+software video/input, plus ALSA for sound effects. Neither backend
+requires SDL or OpenGL. Music and MIDI are not implemented.
+
+Build on a Linux system with ALSA development headers and library installed:
+
+* cd fbdoom
+* make
+
+For the X11 desktop test backend, install the Xlib development files and run:
+
+* cd fbdoom
+* make BACKEND=x11
+* ./fbdoom-x11 -scale 3
+
+The renderer remains at 320x200; presentation maps it to a corrected 4:3
+display image (320x240) using nearest-neighbor sampling. The default fits
+that image to the output while preserving aspect ratio and centering bars.
+For example, 480x272 uses a centered 363x272 image; 320x240 and its
+multiples fill the output. Add `-stretch` to fill the output without
+preserving aspect ratio.
+
+Use `-fullscreen` to request fullscreen from the X11 window manager;
+`-window` overrides that setting. Fullscreen uses the window manager's
+actual output dimensions and recalculates the fit after resize, independent
+of windowed scale. Windowed `-scale` accepts integer sizes from 1 to 8,
+where 1 is 320x240. The X11 and fbdev targets are separate executables
+(`fbdoom-x11` and `fbdoom-fbdev`), so they can be built without reusing
+each other's objects or overwriting binaries.
+
+Use `make BACKEND=fbdev` (the default) for direct framebuffer/evdev. This
+fills the active framebuffer using the same aspect-preserving fit; pass
+`-stretch` to fill non-4:3 displays or `-scaling N` to limit the image to
+an N-times 320x240 region.
+
+In fbdev mode, the executable needs read access to keyboard and mouse
+devices under `/dev/input/event*` and read/write access to `/dev/fb0`.
+Add the user to the system's input/video groups or configure suitable
+device permissions. X11 mode uses the active X server and needs no direct
+evdev device access. If ALSA's default playback device is not the desired
+output, set `ALSA_PCM_DEVICE` to an ALSA PCM name before starting the game.
+
+The game renders internally at 320x200; the selected viewport scales that
+image without changing the renderer's native resolution.
+
 
 Original readme
 ===============

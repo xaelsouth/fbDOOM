@@ -62,11 +62,15 @@ int snd_sfxdevice = SNDDEVICE_SB;
 
 // Sound modules
 
+#ifdef FBDEV_ALSA
+extern sound_module_t sound_alsa_module;
+#else
 extern void I_InitTimidityConfig(void);
 extern sound_module_t sound_sdl_module;
 extern sound_module_t sound_pcsound_module;
 extern music_module_t music_sdl_module;
 extern music_module_t music_opl_module;
+#endif
 
 // For OPL module:
 
@@ -92,8 +96,12 @@ static int snd_mport = 0;
 static sound_module_t *sound_modules[] = 
 {
 #ifdef FEATURE_SOUND
+#ifdef FBDEV_ALSA
+    &sound_alsa_module,
+#else
     &sound_sdl_module,
     &sound_pcsound_module,
+#endif
 #endif
     NULL,
 };
@@ -103,8 +111,10 @@ static sound_module_t *sound_modules[] =
 static music_module_t *music_modules[] =
 {
 #ifdef FEATURE_SOUND
+#ifndef FBDEV_ALSA
     &music_sdl_module,
     &music_opl_module,
+#endif
 #endif
     NULL,
 };
@@ -222,16 +232,15 @@ void I_InitSound(boolean use_sfx_prefix)
 
     if (!nosound && !screensaver_mode)
     {
-        // This is kind of a hack. If native MIDI is enabled, set up
-        // the TIMIDITY_CFG environment variable here before SDL_mixer
-        // is opened.
-
+#ifndef FBDEV_ALSA
+        // Set up native MIDI before initializing SDL_mixer.
         if (!nomusic
          && (snd_musicdevice == SNDDEVICE_GENMIDI
           || snd_musicdevice == SNDDEVICE_GUS))
         {
             I_InitTimidityConfig();
         }
+#endif
 
         if (!nosfx)
         {
@@ -479,4 +488,3 @@ void I_BindSoundVariables(void)
 #endif
 #endif
 }
-
