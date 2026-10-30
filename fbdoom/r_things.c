@@ -591,7 +591,7 @@ void R_ProjectSprite (mobj_t* thing)
 	if (index >= MAXLIGHTSCALE) 
 	    index = MAXLIGHTSCALE-1;
 
-	vis->colormap = spritelights[index];
+	vis->colormap = R_FlashlightColormap(spritelights[index], tz);
     }	
 }
 
@@ -977,6 +977,5 @@ void R_DrawMasked (void)
     if (!viewangleoffset)		
 	R_DrawPlayerSprites ();
 }
-
 
 

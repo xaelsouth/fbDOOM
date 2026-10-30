@@ -164,7 +164,8 @@ R_RenderMaskedSegRange
 		if (index >=  MAXLIGHTSCALE )
 		    index = MAXLIGHTSCALE-1;
 
-		dc_colormap = walllights[index];
+		dc_colormap = R_FlashlightColormap(
+		    walllights[index], FixedDiv(projection, spryscale));
 	    }
 			
 	    sprtopscreen = centeryfrac - FixedMul(dc_texturemid, spryscale);
@@ -645,6 +646,8 @@ R_StoreWallRange
 	    else if (curline->v1->x == curline->v2->x)
 		lightnum++;
 
+	    lightnum += R_FlashlightBoost(rw_distance);
+
 	    if (lightnum < 0)		
 		walllights = scalelight[0];
 	    else if (lightnum >= LIGHTLEVELS)
@@ -740,4 +743,3 @@ R_StoreWallRange
     }
     ds_p++;
 }
-

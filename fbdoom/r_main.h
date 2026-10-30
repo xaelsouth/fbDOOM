@@ -128,6 +128,9 @@ R_PointToDist
 ( fixed_t	x,
   fixed_t	y );
 
+int R_FlashlightBoost (fixed_t distance);
+lighttable_t *R_FlashlightColormap (lighttable_t *colormap,
+                                    fixed_t distance);
 
 fixed_t R_ScaleFromGlobalAngle (angle_t visangle);
 

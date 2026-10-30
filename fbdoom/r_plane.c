@@ -159,7 +159,7 @@ R_MapPlane
 	if (index >= MAXLIGHTZ )
 	    index = MAXLIGHTZ-1;
 
-	ds_colormap = planezlight[index];
+	ds_colormap = R_FlashlightColormap(planezlight[index], distance);
     }
 	
     ds_y = y;

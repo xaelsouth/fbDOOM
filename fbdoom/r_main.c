@@ -29,6 +29,7 @@
 #include "doomdef.h"
 #include "d_loop.h"
 
+#include "m_argv.h"
 #include "m_bbox.h"
 #include "m_menu.h"
 
@@ -103,6 +104,49 @@ lighttable_t*		zlight[LIGHTLEVELS][MAXLIGHTZ];
 
 // bumped light from gun blasts
 int			extralight;			
+
+static boolean		flashlight_enabled;
+
+int R_FlashlightBoost (fixed_t distance)
+{
+    if (!flashlight_enabled || distance <= 0)
+	return 0;
+
+    if (distance < 64 * FRACUNIT)
+	return 8;
+    if (distance < 128 * FRACUNIT)
+	return 6;
+    if (distance < 256 * FRACUNIT)
+	return 4;
+    if (distance < 512 * FRACUNIT)
+	return 2;
+
+    return 0;
+}
+
+lighttable_t *R_FlashlightColormap (lighttable_t *colormap,
+                                   fixed_t distance)
+{
+    int boost;
+    int map;
+
+    if (!flashlight_enabled || fixedcolormap || colormap == NULL)
+	return colormap;
+
+    boost = R_FlashlightBoost(distance);
+    if (boost == 0)
+	return colormap;
+
+    map = (int) (colormap - colormaps) / 256;
+    if (map < 0)
+	return colormap;
+
+    map -= boost;
+    if (map < 0)
+	map = 0;
+
+    return colormaps + map * 256;
+}
 
 
 
@@ -766,6 +810,8 @@ void R_ExecuteSetViewSize (void)
 
 void R_Init (void)
 {
+    flashlight_enabled = M_CheckParm("-flashlight") > 0;
+
     R_InitData ();
     printf (".");
     R_InitPointToAngle ();
