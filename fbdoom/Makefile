@@ -69,6 +69,7 @@ else
 $(error Unsupported BACKEND '$(BACKEND)'; choose fbdev or x11)
 endif
 OBJS+=$(OBJDIR)/i_sound_alsa.o
+OBJS+=$(addprefix $(OBJDIR)/, opl_alsa.o opl.o opl_queue.o opl2.o i_oplmusic.o midifile.o mus2mid.o)
 
 CFLAGS+=-ggdb3 -O2 -fomit-frame-pointer
 # Optional CPU tuning, e.g. make CPU_FLAGS=-mcpu=arm926ej-s for i.MX23.

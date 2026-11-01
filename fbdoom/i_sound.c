@@ -64,6 +64,7 @@ int snd_sfxdevice = SNDDEVICE_SB;
 
 #ifdef FBDEV_ALSA
 extern sound_module_t sound_alsa_module;
+extern music_module_t music_opl_module;
 #else
 extern void I_InitTimidityConfig(void);
 extern sound_module_t sound_sdl_module;
@@ -111,7 +112,9 @@ static sound_module_t *sound_modules[] =
 static music_module_t *music_modules[] =
 {
 #ifdef FEATURE_SOUND
-#ifndef FBDEV_ALSA
+#ifdef FBDEV_ALSA
+    &music_opl_module,
+#else
     &music_sdl_module,
     &music_opl_module,
 #endif
@@ -242,6 +245,21 @@ void I_InitSound(boolean use_sfx_prefix)
         }
 #endif
 
+#ifdef FBDEV_ALSA
+        // Music is mixed by the ALSA sfx mixer, so with -nosfx
+        // keep the mixer running but silence the effects.
+        if (nosfx && !nomusic)
+        {
+            extern void I_ALSA_MuteSfx(void);
+
+            InitSfxModule(use_sfx_prefix);
+            if (sound_module != NULL)
+            {
+                I_ALSA_MuteSfx();
+            }
+        }
+        else
+#endif
         if (!nosfx)
         {
             InitSfxModule(use_sfx_prefix);

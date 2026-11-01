@@ -116,6 +116,7 @@ Command line switches (fbdev backend):
                        imx23-pxp driver is looked up automatically
   -showfps             on-screen frame counter, in every mode
   -nosound             disable sound, in every mode
+  -nomusic, -nosfx     disable music or effects only (see "Music")
 
 -pxpfb only has an effect together with -pxp or -pxpdev.
 
@@ -196,6 +197,34 @@ second) in the top-left corner of the game frame, for the fbdev and X11
 backends and with or without `-pxp`. It is drawn into the 320x200 frame, so it
 is scaled with the picture.
 
+Music (OPL emulation, ALSA builds)
+----------------------------------
+
+Music is on by default. The game's MUS tracks are played through an emulated
+OPL2 (AdLib) chip driven by Chocolate Doom's OPL music code and the GENMIDI
+instrument lump of the WAD, and mixed into the same threaded ALSA mixer as the
+sound effects. opl2.c is a small integer-only emulator written for CPUs
+without an FPU; it covers the 2-operator melodic mode that Doom uses (no
+rhythm mode, no OPL3). It costs roughly 15% of real time on a 454 MHz ARM926.
+
+  -nomusic    disable music
+  -nosfx      disable sound effects only (music keeps playing)
+  -nosound    disable all sound
+  -oplstats   print the emulator's CPU use, worst period and ALSA underruns
+              every few seconds
+  -oplhq      render the emulator at the full output rate instead of half
+              (about twice the CPU, slightly cleaner high notes)
+
+The in-game music volume slider is a linear gain, like the effects slider.
+With music enabled the ALSA buffer is 4 periods deep and the mixer thread asks
+for SCHED_FIFO priority (needs root) to avoid underruns.
+
+The configuration and save directory is /mnt/.fdoom.tar/; sfx_volume and
+music_volume (0-15) in default.cfg are used at startup.
+
+The OPL files (opl.c, opl_queue.c, i_oplmusic.c, midifile.c, mus2mid.c) come
+from Chocolate Doom (GPL).
+
 Common Doom switches
 --------------------
 
@@ -213,6 +242,8 @@ Chocolate Doom documentation, from which this engine derives):
   -timedemo NAME  play a demo as fast as possible and print the frame rate
   -config FILE    use a different configuration file
   -nosound        disable sound entirely (see above)
+  -nomusic        disable music (see "Music" above)
+  -nosfx          disable sound effects only
 
 
 Original readme

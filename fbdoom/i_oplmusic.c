@@ -297,7 +297,12 @@ static const unsigned int volume_mapping_table[] = {
 static boolean music_initialized = false;
 
 //static boolean musicpaused = false;
-static int current_music_volume;
+// The music volume is applied as a linear gain in the mixer (see
+// I_OPL_SetMixVolume); the OPL levels always use full volume, because the
+// MIDI volume curve is almost flat in the upper half of the slider.
+static int current_music_volume = 127;
+
+extern void I_OPL_SetMixVolume(int volume);
 
 // GENMIDI lump instrument data:
 
@@ -580,21 +585,7 @@ static void InitVoices(void)
 
 static void I_OPL_SetMusicVolume(int volume)
 {
-    unsigned int i;
-
-    // Internal state variable.
-
-    current_music_volume = volume;
-
-    // Update the volume of all voices.
-
-    for (i=0; i<OPL_NUM_VOICES; ++i)
-    {
-        if (voices[i].channel != NULL)
-        {
-            SetVoiceVolume(&voices[i], voices[i].note_volume);
-        }
-    }
+    I_OPL_SetMixVolume(volume);
 }
 
 static void VoiceKeyOff(opl_voice_t *voice)

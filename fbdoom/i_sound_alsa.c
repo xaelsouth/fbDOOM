@@ -4,8 +4,10 @@
 
 #include <alsa/asoundlib.h>
 #include <pthread.h>
+#include <sched.h>
 #include <stdint.h>
 #include <stdio.h>
+#include <errno.h>
 #include <stdlib.h>
 #include <string.h>
 
@@ -14,6 +16,7 @@
 #include "doomtype.h"
 #include "i_sound.h"
 #include "i_system.h"
+#include "m_argv.h"
 #include "sounds.h"
 #include "w_wad.h"
 #include "z_zone.h"
@@ -157,7 +160,9 @@ static boolean InitSound(boolean sfx_prefix)
     const char *device = getenv("ALSA_PCM_DEVICE");
     snd_pcm_hw_params_t *params;
     snd_pcm_uframes_t period_size;
-    unsigned int periods = 2;
+    // Music rendering (on by default) makes the mixer's period time uneven: use a deeper
+    // buffer so a late period doesn't underrun (costs latency for sfx).
+    unsigned int periods = M_CheckParm("-nomusic") ? 2 : 4;
     snd_pcm_uframes_t buffer_size;
     int err;
     int i;
@@ -345,11 +350,19 @@ static void ShutdownSound(void)
     }
 }
 
+static int sfx_muted;
+
+// Used by -nosfx: the mixer still has to run to carry the music.
+void I_ALSA_MuteSfx(void)
+{
+    sfx_muted = 1;
+}
+
 static int StartSound(sfxinfo_t *sfxinfo, int channel, int volume, int sep)
 {
     cached_sound_t *sound;
 
-    if (pcm == NULL || channel < 0 || channel >= ALSA_CHANNELS)
+    if (sfx_muted || pcm == NULL || channel < 0 || channel >= ALSA_CHANNELS)
     {
         return -1;
     }
@@ -407,6 +420,13 @@ static void UpdateSoundParams(int channel, int volume, int sep)
     }
 }
 
+extern void I_OPL_Mix(int32_t *mix, unsigned int frames);
+
+int I_ALSA_MixerRate(void)
+{
+    return mixer_running ? (int) output_rate : 0;
+}
+
 static void MixAndWrite(void)
 {
     snd_pcm_uframes_t frame;
@@ -449,6 +469,8 @@ static void MixAndWrite(void)
     }
     pthread_mutex_unlock(&channel_lock);
 
+    I_OPL_Mix(mix_buffer, frames_per_update);
+
     for (frame = 0; frame < frames_per_update * 2; ++frame)
     {
         int32_t sample = mix_buffer[frame];
@@ -466,9 +488,23 @@ static void MixAndWrite(void)
     }
 }
 
+static unsigned int underruns;
+
+unsigned int I_ALSA_Underruns(void)
+{
+    return underruns;
+}
+
 static void *MixerMain(void *arg)
 {
     (void) arg;
+
+    // Best effort: let the mixer preempt the renderer (needs root).
+    {
+        struct sched_param sp = { .sched_priority = 10 };
+
+        pthread_setschedparam(pthread_self(), SCHED_FIFO, &sp);
+    }
 
     while (mixer_running)
     {
@@ -484,6 +520,10 @@ static void *MixerMain(void *arg)
 
             if (written < 0)
             {
+                if (written == -EPIPE)
+                {
+                    ++underruns;
+                }
                 if (snd_pcm_recover(pcm, (int) written, 1) < 0)
                 {
                     fprintf(stderr, "ALSA: playback failed, sound stopped\n");
