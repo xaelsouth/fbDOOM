@@ -32,7 +32,7 @@ CC=$(CROSS_COMPILE)gcc  # gcc or g++
 CFLAGS+=-ggdb3 -Os
 LDFLAGS+=-Wl,--gc-sections
 CFLAGS+=-std=gnu99 -ggdb3 -Wall -DNORMALUNIX -DLINUX -DFBDEV_ALSA
-LIBS+=-lm -lc -lasound
+LIBS+=-lm -lc -lasound -lpthread
 
 # Keep backend object files separate so changing BACKEND never mixes objects.
 OBJDIR=build-$(BACKEND)

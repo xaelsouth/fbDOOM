@@ -3,6 +3,7 @@
 //
 
 #include <alsa/asoundlib.h>
+#include <pthread.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -42,6 +43,13 @@ static playing_sound_t channels[ALSA_CHANNELS];
 static int use_sfx_prefix;
 static int16_t *output_buffer;
 static int32_t *mix_buffer;
+
+// Mixing runs in its own thread so that playback keeps flowing when the game
+// renders slower than TICRATE; channels[] is protected by channel_lock.
+static pthread_t mixer_thread;
+static pthread_mutex_t channel_lock = PTHREAD_MUTEX_INITIALIZER;
+static volatile int mixer_running;
+static int mixer_started;
 
 static sfxinfo_t *ResolveSound(sfxinfo_t *sfxinfo)
 {
@@ -142,12 +150,15 @@ static int GetSfxLumpNum(sfxinfo_t *sfxinfo)
     return W_GetNumForName(name);
 }
 
+static void *MixerMain(void *arg);
+
 static boolean InitSound(boolean sfx_prefix)
 {
     const char *device = getenv("ALSA_PCM_DEVICE");
     snd_pcm_hw_params_t *params;
     snd_pcm_uframes_t period_size;
-    unsigned int periods = 4;
+    unsigned int periods = 2;
+    snd_pcm_uframes_t buffer_size;
     int err;
     int i;
 
@@ -199,7 +210,7 @@ static boolean InitSound(boolean sfx_prefix)
         err = snd_pcm_hw_params_set_rate_near(pcm, params, &output_rate, 0);
     }
 
-    period_size = output_rate / 70;
+    period_size = output_rate / 200;
     if (period_size == 0)
     {
         period_size = 1;
@@ -217,6 +228,15 @@ static boolean InitSound(boolean sfx_prefix)
     {
         err = snd_pcm_hw_params(pcm, params);
     }
+    if (err >= 0)
+    {
+        snd_pcm_hw_params_get_period_size(params, &period_size, NULL);
+        snd_pcm_hw_params_get_buffer_size(params, &buffer_size);
+        fprintf(stderr, "ALSA: period %lu frames, buffer %lu frames "
+                        "(%lu ms)\n", (unsigned long) period_size,
+                (unsigned long) buffer_size,
+                (unsigned long) (buffer_size * 1000 / output_rate));
+    }
     snd_pcm_hw_params_free(params);
 
     if (err < 0)
@@ -228,7 +248,8 @@ static boolean InitSound(boolean sfx_prefix)
         return false;
     }
 
-    frames_per_update = output_rate / TICRATE;
+    // Mix in period-sized chunks so a write never waits for a partial period.
+    frames_per_update = period_size;
     if (frames_per_update == 0)
     {
         frames_per_update = 1;
@@ -268,6 +289,21 @@ static boolean InitSound(boolean sfx_prefix)
         channels[i].sound = NULL;
     }
 
+    mixer_running = 1;
+    if (pthread_create(&mixer_thread, NULL, MixerMain, NULL) != 0)
+    {
+        fprintf(stderr, "ALSA: cannot start mixer thread\n");
+        mixer_running = 0;
+        free(output_buffer);
+        free(mix_buffer);
+        output_buffer = NULL;
+        mix_buffer = NULL;
+        snd_pcm_close(pcm);
+        pcm = NULL;
+        return false;
+    }
+    mixer_started = 1;
+
     fprintf(stderr, "ALSA: sound effects at %u Hz on '%s'\n",
             output_rate, device);
     return true;
@@ -276,6 +312,13 @@ static boolean InitSound(boolean sfx_prefix)
 static void ShutdownSound(void)
 {
     int i;
+
+    if (mixer_started)
+    {
+        mixer_running = 0;
+        pthread_join(mixer_thread, NULL);
+        mixer_started = 0;
+    }
 
     if (pcm != NULL)
     {
@@ -317,12 +360,14 @@ static int StartSound(sfxinfo_t *sfxinfo, int channel, int volume, int sep)
         return -1;
     }
 
+    pthread_mutex_lock(&channel_lock);
     channels[channel].sound = sound;
     channels[channel].position = 0;
     channels[channel].step = ((uint64_t) sound->sample_rate << 16)
                            / output_rate;
     channels[channel].volume = volume;
     channels[channel].separation = sep;
+    pthread_mutex_unlock(&channel_lock);
     return channel;
 }
 
@@ -330,39 +375,47 @@ static void StopSound(int channel)
 {
     if (channel >= 0 && channel < ALSA_CHANNELS)
     {
+        pthread_mutex_lock(&channel_lock);
         channels[channel].sound = NULL;
+        pthread_mutex_unlock(&channel_lock);
     }
 }
 
 static boolean SoundIsPlaying(int channel)
 {
-    return channel >= 0 && channel < ALSA_CHANNELS
-        && channels[channel].sound != NULL;
+    boolean playing;
+
+    if (channel < 0 || channel >= ALSA_CHANNELS)
+    {
+        return false;
+    }
+
+    pthread_mutex_lock(&channel_lock);
+    playing = channels[channel].sound != NULL;
+    pthread_mutex_unlock(&channel_lock);
+    return playing;
 }
 
 static void UpdateSoundParams(int channel, int volume, int sep)
 {
     if (channel >= 0 && channel < ALSA_CHANNELS)
     {
+        pthread_mutex_lock(&channel_lock);
         channels[channel].volume = volume;
         channels[channel].separation = sep;
+        pthread_mutex_unlock(&channel_lock);
     }
 }
 
-static void UpdateSound(void)
+static void MixAndWrite(void)
 {
     snd_pcm_uframes_t frame;
     int channel;
-    int err;
-
-    if (pcm == NULL)
-    {
-        return;
-    }
 
     memset(mix_buffer, 0,
            frames_per_update * 2 * sizeof(*mix_buffer));
 
+    pthread_mutex_lock(&channel_lock);
     for (channel = 0; channel < ALSA_CHANNELS; ++channel)
     {
         playing_sound_t *playing = &channels[channel];
@@ -394,6 +447,7 @@ static void UpdateSound(void)
             playing->position += playing->step;
         }
     }
+    pthread_mutex_unlock(&channel_lock);
 
     for (frame = 0; frame < frames_per_update * 2; ++frame)
     {
@@ -410,33 +464,45 @@ static void UpdateSound(void)
 
         output_buffer[frame] = (int16_t) sample;
     }
+}
 
-    frame = 0;
-    while (frame < frames_per_update)
+static void *MixerMain(void *arg)
+{
+    (void) arg;
+
+    while (mixer_running)
     {
-        snd_pcm_sframes_t written =
-            snd_pcm_writei(pcm, output_buffer + frame * 2,
-                           frames_per_update - frame);
+        snd_pcm_uframes_t frame = 0;
 
-        if (written < 0)
+        MixAndWrite();
+
+        while (frame < frames_per_update && mixer_running)
         {
-            err = snd_pcm_recover(pcm, (int) written, 1);
-            if (err < 0)
+            snd_pcm_sframes_t written =
+                snd_pcm_writei(pcm, output_buffer + frame * 2,
+                               frames_per_update - frame);
+
+            if (written < 0)
             {
-                I_Error("ALSA: playback failed: %s", snd_strerror(err));
-                return;
+                if (snd_pcm_recover(pcm, (int) written, 1) < 0)
+                {
+                    fprintf(stderr, "ALSA: playback failed, sound stopped\n");
+                    return NULL;
+                }
             }
-        }
-        else
-        {
-            if (written == 0)
+            else
             {
-                I_Error("ALSA: playback write made no progress");
-                return;
+                frame += written;
             }
-            frame += written;
         }
     }
+
+    return NULL;
+}
+
+// Mixing is done by the mixer thread; nothing to do per game tic.
+static void UpdateSound(void)
+{
 }
 
 static void CacheSounds(sfxinfo_t *sounds, int num_sounds)
