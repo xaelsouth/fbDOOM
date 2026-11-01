@@ -25,7 +25,9 @@ software video/input, plus ALSA for sound effects and music. Neither
 backend requires SDL or OpenGL. Music is played through an emulated OPL2
 (AdLib) chip, not through MIDI hardware or SDL_mixer (see "Music" below).
 
-Build on a Linux system with ALSA development headers and library installed:
+Build on a Linux system, preferably with the ALSA development headers and
+library installed (without them the game builds without sound, see `ALSA=`
+below):
 
 * cd fbdoom
 * make
@@ -36,9 +38,12 @@ For the X11 desktop test backend, install the Xlib development files and run:
 * make BACKEND=x11
 * ./fbdoom-x11 -scale 3
 
-Optional build features (fbdev backend). The Makefile probes the selected
-compiler, so cross builds work, and the defaults build on any CPU target:
+Optional build features. The Makefile probes the selected compiler, so cross
+builds work, and the defaults build on any CPU target:
 
+* `ALSA=auto|1|0` (both backends): sound effects and OPL music. Enabled
+  automatically when `<alsa/asoundlib.h>` is available. `ALSA=0` builds a
+  silent game that does not need libasound.
 * `PXP=auto|1|0`: i.MX23 PXP video path (`-pxp`). Enabled automatically when
   `<linux/videodev2.h>` is available and the target is little-endian. The
   hardware itself is only looked for at run time.

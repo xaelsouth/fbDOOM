@@ -68,15 +68,32 @@ LIBS+=-lX11
 else
 $(error Unsupported BACKEND '$(BACKEND)'; choose fbdev or x11)
 endif
+
+# Optional ALSA sound and OPL music. Enabled when <alsa/asoundlib.h> is
+# available; force it on or off with ALSA=1 / ALSA=0. Without it the game
+# builds and runs silently and needs no libasound.
+ALSA ?= auto
+ifeq ($(ALSA),auto)
+ifneq ($(shell printf '\#include <alsa/asoundlib.h>\n' | $(CC) -E -x c - >/dev/null 2>&1 && echo yes),)
+ALSA=1
+else
+ALSA=0
+endif
+endif
+
+ifeq ($(ALSA),1)
+CFLAGS+=-DHAVE_ALSA
 OBJS+=$(OBJDIR)/i_sound_alsa.o
 OBJS+=$(addprefix $(OBJDIR)/, opl_alsa.o opl.o opl_queue.o opl2.o i_oplmusic.o midifile.o mus2mid.o)
+LIBS+=-lasound
+endif
 
 CFLAGS+=-ggdb3 -O2 -fomit-frame-pointer
 # Optional CPU tuning, e.g. make CPU_FLAGS=-mcpu=arm926ej-s for i.MX23.
 CFLAGS+=$(CPU_FLAGS)
 LDFLAGS+=-Wl,--gc-sections
 CFLAGS+=-std=gnu99 -ggdb3 -Wall -DNORMALUNIX -DLINUX -DFBDEV_ALSA
-LIBS+=-lm -lc -lasound -lpthread
+LIBS+=-lm -lc -lpthread
 
 # Keep backend object files separate so changing BACKEND never mixes objects.
 OBJDIR=build-$(BACKEND)
