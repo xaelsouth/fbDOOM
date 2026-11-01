@@ -10,6 +10,7 @@
 #include <fcntl.h>
 #include <errno.h>
 #include <sys/ioctl.h>
+#include <time.h>
 #include <sys/mman.h>
 #include <linux/videodev2.h>
 #include <linux/fb.h>
@@ -48,6 +49,16 @@ static size_t cap_len;
 static uint8_t *cap_buf;    // PXP output, copied into the framebuffer
 static size_t page_bytes;
 static int vsync_ok = 1;
+static double vsync_period;     // measured refresh period in seconds
+static double pan_time;         // when the last pan was issued
+
+static double now_sec(void)
+{
+    struct timespec ts;
+
+    clock_gettime(CLOCK_MONOTONIC, &ts);
+    return ts.tv_sec + ts.tv_nsec / 1e9;
+}
 
 static int clampi(int v, int lo, int hi)
 {
@@ -333,8 +344,34 @@ boolean I_PXP_Init(const char *device, int fd_fb,
     pending = 0;
     cur = 0;
 
+    // Measure the refresh period; without it every flip waits for vsync.
+    if (pages > 1)
+    {
+        unsigned int arg = 0;
+        double t0, t1;
+        int n;
+
+        if (ioctl(fd_fb, FBIO_WAITFORVSYNC, &arg) < 0)
+            vsync_ok = 0;
+        else
+        {
+            t0 = now_sec();
+            for (n = 0; n < 8 && vsync_ok; n++)
+                if (ioctl(fd_fb, FBIO_WAITFORVSYNC, &arg) < 0)
+                    vsync_ok = 0;
+            t1 = now_sec();
+            vsync_period = (t1 - t0) / 8;
+            // Be conservative: only skip the wait if clearly past the period.
+            vsync_period *= 1.25;
+            if (vsync_period < 0.005 || vsync_period > 0.1)
+                vsync_period = 1e9;
+        }
+    }
+
     fprintf(stderr, "PXP: %s, %dx%d from %dx%d canvas, %d page(s)\n",
             device, xres, hv, canvas_w, SCREENHEIGHT, pages);
+    if (pages > 1 && vsync_ok && vsync_period < 1.0)
+        fprintf(stderr, "PXP: refresh %.1f Hz\n", 1.25 / vsync_period);
     return true;
 }
 
@@ -372,7 +409,11 @@ void I_PXP_Present(const byte *indexed)
 
             // Make sure the previous pan took effect before touching the
             // page that was on screen until then.
-            if (pages > 1 && vsync_ok)
+            // A pan takes effect at the first vsync after it was issued, so
+            // once a full refresh period has passed it is already visible
+            // and waiting for yet another vsync would only stall the game.
+            if (pages > 1 && vsync_ok
+                && now_sec() - pan_time < vsync_period)
             {
                 unsigned int arg = 0;
 
@@ -386,6 +427,7 @@ void I_PXP_Present(const byte *indexed)
             if (pages > 1)
             {
                 fbvar.yoffset = target * fbvar.yres;
+                pan_time = now_sec();
                 if (xioctl(fd_fbdev, FBIOPAN_DISPLAY, &fbvar) == 0)
                     shown = target;
             }
