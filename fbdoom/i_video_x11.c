@@ -6,6 +6,8 @@
 #include <X11/Xutil.h>
 #include <X11/keysym.h>
 
+#include "i_fps.h"
+
 #include <errno.h>
 #include <limits.h>
 #include <stdint.h>
@@ -783,6 +785,7 @@ void I_FinishUpdate(void)
         return;
     }
 
+    I_FPS_Frame(I_VideoBuffer);
     RenderImage();
     XPutImage(display, window, graphics_context, image,
               0, 0, 0, 0, image->width, image->height);

@@ -34,6 +34,7 @@ rcsid[] = "$Id: i_x.c,v 1.6 1997/02/03 22:45:10 b1 Exp $";
 #include "i_video.h"
 #include "i_video_scaling.h"
 #include "i_video_pxp.h"
+#include "i_fps.h"
 #include "z_zone.h"
 
 #include "tables.h"
@@ -471,6 +472,8 @@ void I_FinishUpdate (void)
 {
     int y;
     int output_bytes = fb.xres * bytes_per_pixel;
+
+    I_FPS_Frame(I_VideoBuffer);
 
     if (pxp_active)
     {

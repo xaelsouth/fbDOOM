@@ -141,6 +141,14 @@ why the extra `memcpy` is used. No change to the PXP driver is required.
 To measure the gain, run the same `-timedemo demo1` with and without `-pxp`
 on an otherwise idle system.
 
+On-screen FPS counter
+---------------------
+
+`-showfps` draws the number of presented frames per second (updated once per
+second) in the top-left corner of the game frame, for the fbdev and X11
+backends and with or without `-pxp`. It is drawn into the 320x200 frame, so it
+is scaled with the picture.
+
 
 Original readme
 ===============
