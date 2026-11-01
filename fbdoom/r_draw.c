@@ -227,12 +227,33 @@ void R_DrawColumn (void)
     }
     else
     {
-	do
+	// Locals let the compiler keep the tables in registers: the byte
+	// stores below could otherwise alias the dc_* globals.
+	const lighttable_t *colormap = dc_colormap;
+	const byte *src = dc_source;
+
+	count++;
+	while (count >= 4)
 	{
-	    *dest = dc_colormap[dc_source[(frac>>FRACBITS)&127]];
+	    byte p0 = colormap[src[(frac >> FRACBITS) & 127]];
+	    byte p1 = colormap[src[((frac + fracstep) >> FRACBITS) & 127]];
+	    byte p2 = colormap[src[((frac + 2 * fracstep) >> FRACBITS) & 127]];
+	    byte p3 = colormap[src[((frac + 3 * fracstep) >> FRACBITS) & 127]];
+
+	    dest[0] = p0;
+	    dest[SCREENWIDTH] = p1;
+	    dest[SCREENWIDTH * 2] = p2;
+	    dest[SCREENWIDTH * 3] = p3;
+	    dest += SCREENWIDTH * 4;
+	    frac += 4 * fracstep;
+	    count -= 4;
+	}
+	while (count-- > 0)
+	{
+	    *dest = colormap[src[(frac >> FRACBITS) & 127]];
 	    dest += SCREENWIDTH;
 	    frac += fracstep;
-	} while (count--);
+	}
     }
 } 
 
@@ -345,13 +366,24 @@ void R_DrawColumnLow (void)
     }
     else
     {
-	do
+	const lighttable_t *colormap = dc_colormap;
+	const byte *src = dc_source;
+
+	count++;
+	while (count >= 2)
 	{
-	    *dest2 = *dest = dc_colormap[dc_source[(frac>>FRACBITS)&127]];
-	    dest += SCREENWIDTH;
-	    dest2 += SCREENWIDTH;
-	    frac += fracstep;
-	} while (count--);
+	    byte p0 = colormap[src[(frac >> FRACBITS) & 127]];
+	    byte p1 = colormap[src[((frac + fracstep) >> FRACBITS) & 127]];
+
+	    dest[0] = dest2[0] = p0;
+	    dest[SCREENWIDTH] = dest2[SCREENWIDTH] = p1;
+	    dest += SCREENWIDTH * 2;
+	    dest2 += SCREENWIDTH * 2;
+	    frac += 2 * fracstep;
+	    count -= 2;
+	}
+	if (count > 0)
+	    *dest2 = *dest = colormap[src[(frac >> FRACBITS) & 127]];
     }
 }
 
@@ -774,22 +806,47 @@ void R_DrawSpan (void)
     dest = ylookup[ds_y] + columnofs[ds_x1];
 
     // We do not check for zero spans here?
-    count = ds_x2 - ds_x1;
+    count = ds_x2 - ds_x1 + 1;
 
-    do
     {
-	// Calculate current texture index in u,v.
-        ytemp = (position >> 4) & 0x0fc0;
-        xtemp = (position >> 26);
-        spot = xtemp | ytemp;
+	// Locals let the compiler keep the tables in registers: the byte
+	// stores below could otherwise alias the ds_* globals.
+	const lighttable_t *colormap = ds_colormap;
+	const byte *src = ds_source;
 
-	// Lookup pixel from flat texture tile,
-	//  re-index using light/colormap.
-	*dest++ = ds_colormap[ds_source[spot]];
+	while (count >= 4)
+	{
+	    byte p0, p1, p2, p3;
 
-        position += step;
+	    spot = ((position >> 26) | ((position >> 4) & 0x0fc0));
+	    p0 = colormap[src[spot]];
+	    position += step;
+	    spot = ((position >> 26) | ((position >> 4) & 0x0fc0));
+	    p1 = colormap[src[spot]];
+	    position += step;
+	    spot = ((position >> 26) | ((position >> 4) & 0x0fc0));
+	    p2 = colormap[src[spot]];
+	    position += step;
+	    spot = ((position >> 26) | ((position >> 4) & 0x0fc0));
+	    p3 = colormap[src[spot]];
+	    position += step;
 
-    } while (count--);
+	    dest[0] = p0;
+	    dest[1] = p1;
+	    dest[2] = p2;
+	    dest[3] = p3;
+	    dest += 4;
+	    count -= 4;
+	}
+	while (count-- > 0)
+	{
+	    ytemp = (position >> 4) & 0x0fc0;
+	    xtemp = (position >> 26);
+	    spot = xtemp | ytemp;
+	    *dest++ = colormap[src[spot]];
+	    position += step;
+	}
+    }
 }
 
 
@@ -903,21 +960,30 @@ void R_DrawSpanLow (void)
 
     dest = ylookup[ds_y] + columnofs[ds_x1];
 
-    do
+    count++;
+
     {
-	// Calculate current texture index in u,v.
-        ytemp = (position >> 4) & 0x0fc0;
-        xtemp = (position >> 26);
-        spot = xtemp | ytemp;
+	const lighttable_t *colormap = ds_colormap;
+	const byte *src = ds_source;
 
-	// Lowres/blocky mode does it twice,
-	//  while scale is adjusted appropriately.
-	*dest++ = ds_colormap[ds_source[spot]];
-	*dest++ = ds_colormap[ds_source[spot]];
+	while (count-- > 0)
+	{
+	    byte pixel;
 
-	position += step;
+	    ytemp = (position >> 4) & 0x0fc0;
+	    xtemp = (position >> 26);
+	    spot = xtemp | ytemp;
 
-    } while (count--);
+	    // Lowres/blocky mode does it twice,
+	    //  while scale is adjusted appropriately.
+	    pixel = colormap[src[spot]];
+	    dest[0] = pixel;
+	    dest[1] = pixel;
+	    dest += 2;
+
+	    position += step;
+	}
+    }
 }
 
 //

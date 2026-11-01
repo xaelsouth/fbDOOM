@@ -48,7 +48,9 @@ $(error Unsupported BACKEND '$(BACKEND)'; choose fbdev or x11)
 endif
 OBJS+=$(OBJDIR)/i_sound_alsa.o
 
-CFLAGS+=-ggdb3 -Os
+CFLAGS+=-ggdb3 -O2 -fomit-frame-pointer
+# Optional CPU tuning, e.g. make CPU_FLAGS=-mcpu=arm926ej-s for i.MX23.
+CFLAGS+=$(CPU_FLAGS)
 LDFLAGS+=-Wl,--gc-sections
 CFLAGS+=-std=gnu99 -ggdb3 -Wall -DNORMALUNIX -DLINUX -DFBDEV_ALSA
 LIBS+=-lm -lc -lasound -lpthread

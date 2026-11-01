@@ -39,6 +39,8 @@ compiler, so cross builds work, and the defaults build on any CPU target:
 * `PXP=auto|1|0`: i.MX23 PXP video path (`-pxp`). Enabled automatically when
   `<linux/videodev2.h>` is available and the target is little-endian. The
   hardware itself is only looked for at run time.
+* `CPU_FLAGS=...`: extra CPU tuning flags, none by default. For i.MX23 use
+  `make CPU_FLAGS=-mcpu=arm926ej-s`.
 * `make config` prints the detected settings and the resulting `CFLAGS`.
 
 Pass `-flashlight` to add a player-centered dynamic light. Nearby walls,
