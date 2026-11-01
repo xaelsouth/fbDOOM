@@ -33,6 +33,14 @@ For the X11 desktop test backend, install the Xlib development files and run:
 * make BACKEND=x11
 * ./fbdoom-x11 -scale 3
 
+Optional build features (fbdev backend). The Makefile probes the selected
+compiler, so cross builds work, and the defaults build on any CPU target:
+
+* `PXP=auto|1|0`: i.MX23 PXP video path (`-pxp`). Enabled automatically when
+  `<linux/videodev2.h>` is available and the target is little-endian. The
+  hardware itself is only looked for at run time.
+* `make config` prints the detected settings and the resulting `CFLAGS`.
+
 Pass `-flashlight` to add a player-centered dynamic light. Nearby walls,
 planes, and sprites receive a stronger existing palette colormap; the
 effect falls off with distance. It is opt-in and uses the software
@@ -77,6 +85,61 @@ ALSA playback device; this is useful on systems without audio hardware.
 
 The game renders internally at 320x200; the selected viewport scales that
 image without changing the renderer's native resolution.
+
+i.MX23 PXP acceleration (fbdev backend only)
+--------------------------------------------
+
+`-pxp` offloads scaling and colour conversion to the i.MX23 PXP through its
+V4L2 mem2mem device: the indexed frame is converted to planar YUV 4:2:0 with
+a palette lookup table, and the PXP scales it to RGB straight into the
+framebuffer. `-pxpdev /dev/videoN` selects the device explicitly; otherwise
+the `imx23-pxp` driver is looked up automatically. If anything is missing,
+fbDOOM prints a message and falls back to software scaling.
+
+Requirements: a 32bpp (XRGB8888) or 16bpp (RGB565) framebuffer whose width is
+a multiple of 8 and not padded. The stock imx23-pxp driver is used unchanged:
+the PXP renders into its own V4L2 buffer and one memcpy copies the finished
+frame into the framebuffer. For flicker-free page flipping the framebuffer
+needs a virtual height of at least twice the visible one (with DRM fbdev
+emulation: `CONFIG_DRM_FBDEV_OVERALLOC=200`); otherwise a single page is used
+and tearing may occur. Aspect ratio is kept by letterboxing, or by
+pillarboxing inside the source frame for screens wider than 4:3.
+
+How the PXP path works
+......................
+
+The software scaler (`I_FinishUpdate` in `i_video_fbdev.c`) maps, looks up and
+stores every one of the ~130k output pixels on the CPU, clears the whole frame
+and then `write()`s it to the framebuffer. On a 454 MHz ARM926 without an FPU
+that dominates the frame time. With `-pxp` (`i_video_pxp.c`) the work is split:
+
+1. The CPU converts the 320x200 8-bit frame to planar YUV 4:2:0 (full-range
+   BT.601) using a 256-entry palette lookup table that is rebuilt whenever the
+   palette changes. Y is written four pixels per 32-bit store; U and V are
+   averaged over horizontal pairs on even rows only. That is ~64k lookups per
+   frame instead of ~130k scaled pixels.
+2. The PXP, through the V4L2 mem2mem device, scales the YUV frame to the
+   framebuffer size and converts it to RGB565 or XRGB8888 (chosen from the
+   framebuffer layout) into its own capture buffer.
+3. The CPU copies that buffer into the off-screen framebuffer page with a
+   single `memcpy`, waits for vsync and flips with `FBIOPAN_DISPLAY`.
+
+Frames are pipelined: the PXP converts frame N while the CPU renders frame
+N+1, and the CPU only waits for the result when it needs it. Two source
+buffers alternate so the CPU never writes to a buffer the PXP is reading.
+
+On screens wider than 4:3 (e.g. 480x272) the source frame is widened with
+black margins (e.g. 424x200 for 480x272) so the PXP's scaling keeps the aspect
+ratio. PXP limits that shape the code: sizes are multiples of 8, only YUV
+sources can be scaled, there is no stride (the output rectangle is the full
+framebuffer width), and downscaling is limited to 2x.
+
+Writing the PXP output directly into the framebuffer via V4L2 USERPTR does not
+work on Linux 6.6 with DRM fbdev emulation (QBUF fails with EFAULT), which is
+why the extra `memcpy` is used. No change to the PXP driver is required.
+
+To measure the gain, run the same `-timedemo demo1` with and without `-pxp`
+on an otherwise idle system.
 
 
 Original readme

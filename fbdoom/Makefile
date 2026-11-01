@@ -7,6 +7,7 @@
 
 CROSS_COMPILE ?= #arm-linux-gnueabihf-
 BACKEND ?= fbdev
+CC=$(CROSS_COMPILE)gcc  # gcc or g++
 
 ifeq ($(V),1)
 	VB=''
@@ -20,6 +21,25 @@ endif
 ifeq ($(BACKEND),fbdev)
 OBJS+=$(OBJDIR)/i_video_fbdev.o
 OBJS+=$(OBJDIR)/i_input_evdev.o
+
+# Optional i.MX23 PXP (V4L2 mem2mem) video path. It is enabled when the
+# toolchain has <linux/videodev2.h> and the target is little-endian; force it
+# on or off with PXP=1 / PXP=0.
+PXP ?= auto
+ifeq ($(PXP),auto)
+ifneq ($(shell printf '\#include <linux/videodev2.h>\n' | $(CC) -E -x c - >/dev/null 2>&1 && \
+	$(CC) -dM -E -x c /dev/null | grep -q '__ORDER_LITTLE_ENDIAN__ __BYTE_ORDER__\|__BYTE_ORDER__ __ORDER_LITTLE_ENDIAN__' && echo yes),)
+PXP=1
+else
+PXP=0
+endif
+endif
+
+ifeq ($(PXP),1)
+CFLAGS+=-DHAVE_PXP
+OBJS+=$(OBJDIR)/i_video_pxp.o
+
+endif
 else ifeq ($(BACKEND),x11)
 OBJS+=$(OBJDIR)/i_video_x11.o
 LIBS+=-lX11
@@ -28,7 +48,6 @@ $(error Unsupported BACKEND '$(BACKEND)'; choose fbdev or x11)
 endif
 OBJS+=$(OBJDIR)/i_sound_alsa.o
 
-CC=$(CROSS_COMPILE)gcc  # gcc or g++
 CFLAGS+=-ggdb3 -Os
 LDFLAGS+=-Wl,--gc-sections
 CFLAGS+=-std=gnu99 -ggdb3 -Wall -DNORMALUNIX -DLINUX -DFBDEV_ALSA
@@ -67,3 +86,7 @@ $(OBJDIR)/%.o:	%.c
 
 print:
 	@echo OBJS: $(OBJS)
+
+config:
+	@echo PXP=$(PXP)
+	@echo CFLAGS=$(CFLAGS)

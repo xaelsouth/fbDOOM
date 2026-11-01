@@ -33,6 +33,7 @@ rcsid[] = "$Id: i_x.c,v 1.6 1997/02/03 22:45:10 b1 Exp $";
 #include "i_system.h"
 #include "i_video.h"
 #include "i_video_scaling.h"
+#include "i_video_pxp.h"
 #include "z_zone.h"
 
 #include "tables.h"
@@ -58,6 +59,7 @@ extern void I_ShutdownInput(void);
 struct fb_var_screeninfo fb = {};
 static struct fb_fix_screeninfo fb_fix;
 static video_viewport_t viewport;
+static boolean pxp_active = false;
 static boolean stretch_to_fill;
 static unsigned int bytes_per_pixel;
 static size_t output_buffer_size;
@@ -228,11 +230,30 @@ void I_InitGraphics (void)
     /* Allocate screen to draw to */
 	I_VideoBuffer = (byte*)Z_Malloc (SCREENWIDTH * SCREENHEIGHT, PU_STATIC, NULL);
 	output_buffer_size = (size_t) fb.xres * fb.yres * bytes_per_pixel;
-	I_VideoBuffer_FB = calloc(1, output_buffer_size);
-	if (I_VideoBuffer_FB == NULL)
+
+	/* Optional i.MX23 PXP scaling/conversion (-pxp [-pxpdev /dev/videoN]) */
 	{
-	    I_Error("Cannot allocate framebuffer output buffer");
-	    return;
+	    int pxp = M_CheckParm("-pxp");
+	    int pxpdev = M_CheckParmWithArgs("-pxpdev", 1);
+
+	    if (pxp || pxpdev)
+	    {
+	        pxp_active = I_PXP_Init(pxpdev ? myargv[pxpdev + 1] : NULL,
+	                                fd_fb, &fb, &fb_fix, viewport.width,
+	                                viewport.y, viewport.height);
+	        if (!pxp_active)
+	            fprintf(stderr, "PXP unavailable, using software scaling\n");
+	    }
+	}
+
+	if (!pxp_active)
+	{
+	    I_VideoBuffer_FB = calloc(1, output_buffer_size);
+	    if (I_VideoBuffer_FB == NULL)
+	    {
+	        I_Error("Cannot allocate framebuffer output buffer");
+	        return;
+	    }
 	}
 
 	screenvisible = true;
@@ -245,6 +266,11 @@ void I_ShutdownGraphics (void)
 {
 	I_ShutdownInput();
 	Z_Free (I_VideoBuffer);
+	if (pxp_active)
+	{
+	    I_PXP_Shutdown();
+	    pxp_active = false;
+	}
 	free (I_VideoBuffer_FB);
 	if (fd_fb >= 0)
 	{
@@ -446,6 +472,12 @@ void I_FinishUpdate (void)
     int y;
     int output_bytes = fb.xres * bytes_per_pixel;
 
+    if (pxp_active)
+    {
+        I_PXP_Present(I_VideoBuffer);
+        return;
+    }
+
     memset(I_VideoBuffer_FB, 0, output_buffer_size);
 
     for (y = 0; y < viewport.height; ++y)
@@ -574,6 +606,18 @@ void I_SetPalette (byte* palette)
         colors[i].r = gammatable[usegamma][*palette++];
         colors[i].g = gammatable[usegamma][*palette++];
         colors[i].b = gammatable[usegamma][*palette++];
+    }
+
+    {
+        byte rgb[256 * 3];
+
+        for (i = 0; i < 256; ++i)
+        {
+            rgb[i * 3] = colors[i].r;
+            rgb[i * 3 + 1] = colors[i].g;
+            rgb[i * 3 + 2] = colors[i].b;
+        }
+        I_PXP_SetPalette(rgb);
     }
 
     /* Set new color map in kernel framebuffer driver */
