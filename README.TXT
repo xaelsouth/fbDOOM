@@ -9,7 +9,9 @@ Runs on:
 * Siglent SSA 3021X Spectrum Analyzer,
 * Frosted OS,
 * Kinco Green Series GL070HE HMI,
-* Kinco MT4434TE HMI
+* Kinco MT4434TE HMI,
+* NXP i.MX23 (ARM926, 454 MHz, no FPU) boards, optionally with the PXP
+  (-pxp) and DRM scanout
 
 To build (example):
 * cd fbdoom
