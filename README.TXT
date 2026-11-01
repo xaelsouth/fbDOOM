@@ -71,7 +71,9 @@ accepted when they expose at least one key Doom recognizes. Add the user to
 the system's input/video groups or configure suitable device permissions.
 X11 mode uses the active X server and needs no direct evdev device access.
 If ALSA's default playback device is not the desired output, set
-`ALSA_PCM_DEVICE` to an ALSA PCM name before starting the game.
+`ALSA_PCM_DEVICE` to an ALSA PCM name before starting the game. Pass
+`-nosound` to disable sound initialization entirely, including opening the
+ALSA playback device; this is useful on systems without audio hardware.
 
 The game renders internally at 320x200; the selected viewport scales that
 image without changing the renderer's native resolution.
