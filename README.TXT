@@ -21,8 +21,9 @@ Linux framebuffer backend
 =========================
 
 The fbdoom build uses direct Linux framebuffer/evdev or native X11
-software video/input, plus ALSA for sound effects. Neither backend
-requires SDL or OpenGL. Music and MIDI are not implemented.
+software video/input, plus ALSA for sound effects and music. Neither
+backend requires SDL or OpenGL. Music is played through an emulated OPL2
+(AdLib) chip, not through MIDI hardware or SDL_mixer (see "Music" below).
 
 Build on a Linux system with ALSA development headers and library installed:
 
@@ -93,6 +94,7 @@ If ALSA's default playback device is not the desired output, set
 `ALSA_PCM_DEVICE` to an ALSA PCM name before starting the game. Pass
 `-nosound` to disable sound initialization entirely, including opening the
 ALSA playback device; this is useful on systems without audio hardware.
+Use `-nomusic` or `-nosfx` to disable only the music or only the effects.
 
 The game renders internally at 320x200; the selected viewport scales that
 image without changing the renderer's native resolution.
