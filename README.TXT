@@ -119,6 +119,11 @@ Command line switches (fbdev backend):
 
 -pxpfb only has an effect together with -pxp or -pxpdev.
 
+-stretch and -scaling N also work with the PXP (checked on 480x272). With
+-stretch the image fills the screen and DRM scanout is used. With -scaling N
+the image is smaller than the screen and is centred; DRM scanout
+needs a full-screen image, so that case uses the fbdev copy path.
+
 Requirements: a 32bpp (XRGB8888) or 16bpp (RGB565) framebuffer whose width is
 a multiple of 8 and not padded. The stock imx23-pxp driver is used unchanged.
 On the fbdev copy path the PXP renders into its own V4L2 buffer and one
@@ -190,6 +195,24 @@ On-screen FPS counter
 second) in the top-left corner of the game frame, for the fbdev and X11
 backends and with or without `-pxp`. It is drawn into the 320x200 frame, so it
 is scaled with the picture.
+
+Common Doom switches
+--------------------
+
+Standard Doom options that work with every backend (the full list is in the
+Chocolate Doom documentation, from which this engine derives):
+
+  -iwad FILE      main WAD to use (doom1.wad, doom.wad, doom2.wad, ...)
+  -file FILE...   load extra PWAD files
+  -skill N        skill level 1-5
+  -episode N      start episode N (Ultimate Doom / Doom 1)
+  -warp N         start on map N (episode and map for Doom 1)
+  -loadgame N     load the save game in slot N
+  -record NAME    record a demo
+  -playdemo NAME  play a demo and exit
+  -timedemo NAME  play a demo as fast as possible and print the frame rate
+  -config FILE    use a different configuration file
+  -nosound        disable sound entirely (see above)
 
 
 Original readme
