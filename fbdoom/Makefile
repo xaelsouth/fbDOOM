@@ -39,7 +39,29 @@ ifeq ($(PXP),1)
 CFLAGS+=-DHAVE_PXP
 OBJS+=$(OBJDIR)/i_video_pxp.o
 
+# Optional DRM/KMS scanout for the PXP path (needs libdrm); DRM=1 / DRM=0
+# forces it. Without it the PXP result is copied into the fbdev framebuffer.
+DRM ?= auto
+# A cross compiler with a sysroot looks there; pkg-config is for native builds.
+DRM_SYSROOT := $(shell $(CC) -print-sysroot 2>/dev/null)
+ifneq ($(DRM_SYSROOT),)
+DRM_CFLAGS := -I$(DRM_SYSROOT)/usr/include/libdrm
+else
+DRM_CFLAGS := $(shell pkg-config --cflags libdrm 2>/dev/null)
 endif
+ifeq ($(DRM),auto)
+ifneq ($(shell printf '\#include <xf86drm.h>\n' | $(CC) -E -x c $(DRM_CFLAGS) - >/dev/null 2>&1 && echo yes),)
+DRM=1
+else
+DRM=0
+endif
+endif
+ifeq ($(DRM),1)
+CFLAGS+=-DHAVE_DRM $(DRM_CFLAGS)
+LIBS+=-ldrm
+endif
+endif
+
 else ifeq ($(BACKEND),x11)
 OBJS+=$(OBJDIR)/i_video_x11.o
 LIBS+=-lX11
@@ -90,5 +112,5 @@ print:
 	@echo OBJS: $(OBJS)
 
 config:
-	@echo PXP=$(PXP)
+	@echo PXP=$(PXP) DRM=$(DRM)
 	@echo CFLAGS=$(CFLAGS)

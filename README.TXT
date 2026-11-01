@@ -39,9 +39,16 @@ compiler, so cross builds work, and the defaults build on any CPU target:
 * `PXP=auto|1|0`: i.MX23 PXP video path (`-pxp`). Enabled automatically when
   `<linux/videodev2.h>` is available and the target is little-endian. The
   hardware itself is only looked for at run time.
+* `DRM=auto|1|0`: DRM scanout for the PXP path. Enabled automatically when
+  libdrm headers are found (in the compiler's sysroot, or via pkg-config for
+  native builds); needs `-ldrm` at link time.
 * `CPU_FLAGS=...`: extra CPU tuning flags, none by default. For i.MX23 use
   `make CPU_FLAGS=-mcpu=arm926ej-s`.
 * `make config` prints the detected settings and the resulting `CFLAGS`.
+
+Example for the i.MX23 board:
+
+* make CC=/path/to/arm-linux-gcc CPU_FLAGS=-mcpu=arm926ej-s
 
 Pass `-flashlight` to add a player-centered dynamic light. Nearby walls,
 planes, and sprites receive a stronger existing palette colormap; the
@@ -93,15 +100,29 @@ i.MX23 PXP acceleration (fbdev backend only)
 
 `-pxp` offloads scaling and colour conversion to the i.MX23 PXP through its
 V4L2 mem2mem device: the indexed frame is converted to planar YUV 4:2:0 with
-a palette lookup table, and the PXP scales it to RGB straight into the
-framebuffer. `-pxpdev /dev/videoN` selects the device explicitly; otherwise
-the `imx23-pxp` driver is looked up automatically. If anything is missing,
-fbDOOM prints a message and falls back to software scaling.
+a palette lookup table, and the PXP scales it to RGB. By default the result
+goes straight into a DRM scanout buffer (see "DMABUF scanout" below); if that
+is unavailable it is copied into the fbdev framebuffer. If the PXP itself is
+missing, fbDOOM prints a message and falls back to software scaling.
+
+Command line switches (fbdev backend):
+
+  (none)               software scaler on the CPU
+  -pxp                 PXP scaling + DRM DMABUF scanout (recommended); falls
+                       back to the fbdev copy path if DRM setup fails
+  -pxp -pxpfb          PXP scaling, copy into the fbdev framebuffer (for
+                       comparison or if DRM misbehaves)
+  -pxpdev /dev/videoN  select the V4L2 device (implies -pxp); otherwise the
+                       imx23-pxp driver is looked up automatically
+  -showfps             on-screen frame counter, in every mode
+  -nosound             disable sound, in every mode
+
+-pxpfb only has an effect together with -pxp or -pxpdev.
 
 Requirements: a 32bpp (XRGB8888) or 16bpp (RGB565) framebuffer whose width is
-a multiple of 8 and not padded. The stock imx23-pxp driver is used unchanged:
-the PXP renders into its own V4L2 buffer and one memcpy copies the finished
-frame into the framebuffer. For flicker-free page flipping the framebuffer
+a multiple of 8 and not padded. The stock imx23-pxp driver is used unchanged.
+On the fbdev copy path the PXP renders into its own V4L2 buffer and one
+memcpy copies the finished frame into the framebuffer. For flicker-free page flipping the framebuffer
 needs a virtual height of at least twice the visible one (with DRM fbdev
 emulation: `CONFIG_DRM_FBDEV_OVERALLOC=200`); otherwise a single page is used
 and tearing may occur. Aspect ratio is kept by letterboxing, or by
@@ -138,7 +159,26 @@ framebuffer width), and downscaling is limited to 2x.
 
 Writing the PXP output directly into the framebuffer via V4L2 USERPTR does not
 work on Linux 6.6 with DRM fbdev emulation (QBUF fails with EFAULT), which is
-why the extra `memcpy` is used. No change to the PXP driver is required.
+why the fbdev path needs the extra `memcpy`. No change to the PXP driver is
+required.
+
+DMABUF scanout (default when available)
+.......................................
+
+Unless `-pxpfb` is given, fbDOOM first tries to avoid that copy. It opens
+/dev/dri/card0, allocates three dumb buffers of the screen size (XRGB8888),
+exports them as dmabufs and queues them as V4L2 DMABUF capture buffers, so the
+PXP writes straight into a scanout buffer. The finished buffer is shown with a
+DRM page flip; the next frame goes into the buffer that is neither on screen
+nor being flipped to. The only wait is for the previous flip's vsync event,
+which caps the frame rate at the display refresh without tearing. The stock
+driver already allows DMABUF on both queues.
+
+This needs libdrm, a 32bpp little-endian XRGB8888 framebuffer whose height is
+fully covered by the PXP output (e.g. 480x272), and DRM master (the usual case
+when run from the console). If any step fails, a message is printed and the
+fbdev `memcpy` path above is used. The fbdev console is restored on exit.
+`-pxpfb` forces the fbdev path, handy for comparing frame rates.
 
 To measure the gain, run the same `-timedemo demo1` with and without `-pxp`
 on an otherwise idle system.
