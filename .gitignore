@@ -1,3 +1,6 @@
 /fbdoom/fbdoom-fbdev
 /fbdoom/fbdoom-fbdev.map
 /fbdoom/build-fbdev
+/fbdoom/build-x11
+/fbdoom/fbdoom-x11
+/fbdoom/fbdoom-x11.map
