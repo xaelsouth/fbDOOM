@@ -754,6 +754,7 @@ void R_DrawPlayerSprites (void)
 {
     int		i;
     int		lightnum;
+    int		savedcentery;
     pspdef_t*	psp;
     
     // get light level
@@ -772,6 +773,11 @@ void R_DrawPlayerSprites (void)
     mfloorclip = screenheightarray;
     mceilingclip = negonearray;
     
+    // the weapon stays fixed on screen while the horizon moves
+    savedcentery = centery;
+    centery = viewheight/2;
+    centeryfrac = centery<<FRACBITS;
+
     // add all active psprites
     for (i=0, psp=viewplayer->psprites;
 	 i<NUMPSPRITES;
@@ -780,6 +786,9 @@ void R_DrawPlayerSprites (void)
 	if (psp->state)
 	    R_DrawPSprite (psp);
     }
+
+    centery = savedcentery;
+    centeryfrac = centery<<FRACBITS;
 }
 
 

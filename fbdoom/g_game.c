@@ -430,6 +430,17 @@ void G_BuildTiccmd (ticcmd_t* cmd, int maketic)
         side += sidemove[speed]; 
     }
 
+    if (freelook_enabled)
+    {
+	// look keys: PgUp/PgDn tilt the view, End recentres it
+	if (gamekeydown[KEY_PGUP])
+	    R_AdjustLook(LOOKUNIT * (speed ? 4 : 2));
+	if (gamekeydown[KEY_PGDN])
+	    R_AdjustLook(-LOOKUNIT * (speed ? 4 : 2));
+	if (gamekeydown[KEY_END])
+	    R_CenterLook();
+    }
+
     // buttons
     cmd->chatchar = HU_dequeueChatChar(); 
  
@@ -539,7 +550,8 @@ void G_BuildTiccmd (ticcmd_t* cmd, int maketic)
         } 
     }
 
-    forward += mousey; 
+    if (!freelook_enabled)
+	forward += mousey; 
 
     if (strafe) 
 	side += mousex*2; 
@@ -667,6 +679,7 @@ void G_DoLoadLevel (void)
     memset (gamekeydown, 0, sizeof(gamekeydown));
     joyxmove = joyymove = joystrafemove = 0;
     mousex = mousey = 0;
+    R_CenterLook();
     sendpause = sendsave = paused = false;
     memset(mousearray, 0, sizeof(mousearray));
     memset(joyarray, 0, sizeof(joyarray));
@@ -834,6 +847,12 @@ boolean G_Responder (event_t* ev)
         SetMouseButtons(ev->data1);
 	mousex = ev->data2*(mouseSensitivity+5)/10; 
 	mousey = ev->data3*(mouseSensitivity+5)/10; 
+	if (freelook_enabled)
+	{
+	    // about the same angular rate as horizontal mouse turning
+	    R_AdjustLook((mouse_invert_look ? -mousey : mousey) * 10);
+	    mousey = 0;
+	}
 	return true;    // eat events 
  
       case ev_joystick: 

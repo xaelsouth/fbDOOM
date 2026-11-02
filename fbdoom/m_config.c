@@ -122,6 +122,13 @@ static default_t	doom_defaults_list[] =
     CONFIG_VARIABLE_INT(mouse_sensitivity),
 
     //!
+    // If non-zero, mouse freelook is inverted (moving the mouse up looks
+    // down).
+    //
+
+    CONFIG_VARIABLE_INT(mouse_invert_look),
+
+    //!
     // Volume of sound effects, range 0-15.
     //
 

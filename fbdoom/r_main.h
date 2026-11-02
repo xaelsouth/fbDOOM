@@ -135,6 +135,14 @@ void R_InitBrightmaps (void);
 void R_InitTranslucency (void);
 extern boolean brightmaps_enabled;
 extern boolean translucent_shadows;
+extern boolean freelook_enabled;
+extern int mouse_invert_look;
+
+// Freelook: the horizon is shifted vertically (no true pitch). Positive
+// values look up. Amounts are in 1/LOOKUNIT of a screen row.
+#define LOOKUNIT 64
+void R_AdjustLook (int delta);
+void R_CenterLook (void);
 extern void (*tlcolfunc) (void);
 
 fixed_t R_ScaleFromGlobalAngle (angle_t visangle);

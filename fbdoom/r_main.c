@@ -703,13 +703,14 @@ R_SetViewSize
 }
 
 
+static void R_InitYSlope (void);
+
 //
 // R_ExecuteSetViewSize
 //
 void R_ExecuteSetViewSize (void)
 {
     fixed_t	cosadj;
-    fixed_t	dy;
     int		i;
     int		j;
     int		level;
@@ -767,12 +768,7 @@ void R_ExecuteSetViewSize (void)
 	screenheightarray[i] = viewheight;
     
     // planes
-    for (i=0 ; i<viewheight ; i++)
-    {
-	dy = ((i-viewheight/2)<<FRACBITS)+FRACUNIT/2;
-	dy = abs(dy);
-	yslope[i] = FixedDiv ( (viewwidth<<detailshift)/2*FRACUNIT, dy);
-    }
+    R_InitYSlope ();
 	
     for (i=0 ; i<viewwidth ; i++)
     {
@@ -802,6 +798,72 @@ void R_ExecuteSetViewSize (void)
 
 
 
+boolean			freelook_enabled;
+int			mouse_invert_look;
+static int		lookdir;	// in 1/LOOKUNIT rows, positive looks up
+
+
+static int R_MaxLook (void)
+{
+    return viewheight * 2 / 5 * LOOKUNIT;
+}
+
+void R_AdjustLook (int delta)
+{
+    int max = R_MaxLook();
+
+    lookdir += delta;
+    if (lookdir > max)
+	lookdir = max;
+    else if (lookdir < -max)
+	lookdir = -max;
+}
+
+void R_CenterLook (void)
+{
+    lookdir = 0;
+}
+
+// Floor/ceiling distance per screen row, relative to the horizon row.
+static void R_InitYSlope (void)
+{
+    int		i;
+    fixed_t	dy;
+
+    for (i=0 ; i<viewheight ; i++)
+    {
+	dy = ((i-centery)<<FRACBITS)+FRACUNIT/2;
+	dy = abs(dy);
+	yslope[i] = FixedDiv ( (viewwidth<<detailshift)/2*FRACUNIT, dy);
+    }
+}
+
+// Moves the horizon for freelook; recomputes the plane slopes only when it
+// actually moved.
+static void R_SetupLook (void)
+{
+    int newcentery = viewheight/2;
+
+    if (freelook_enabled)
+    {
+	int max = R_MaxLook();
+
+	if (lookdir > max)
+	    lookdir = max;
+	else if (lookdir < -max)
+	    lookdir = -max;
+	newcentery += (lookdir + (lookdir < 0 ? -LOOKUNIT/2 : LOOKUNIT/2))
+	              / LOOKUNIT;
+    }
+
+    if (newcentery == centery)
+	return;
+
+    centery = newcentery;
+    centeryfrac = centery<<FRACBITS;
+    R_InitYSlope ();
+}
+
 //
 // R_Init
 //
@@ -813,6 +875,9 @@ void R_Init (void)
     flashlight_enabled = M_CheckParm("-flashlight") > 0;
     brightmaps_enabled = M_CheckParm("-brightmaps") > 0;
     translucent_shadows = M_CheckParm("-translucent") > 0;
+    freelook_enabled = M_CheckParm("-freelook") != 0;
+    if (M_CheckParm("-invertlook"))
+	mouse_invert_look = 1;
 
     R_InitData ();
     if (brightmaps_enabled)
@@ -888,6 +953,8 @@ void R_SetupFrame (player_t* player)
     viewcos = finecosine[viewangle>>ANGLETOFINESHIFT];
 	
     sscount = 0;
+
+    R_SetupLook ();
 	
     if (player->fixedcolormap)
     {

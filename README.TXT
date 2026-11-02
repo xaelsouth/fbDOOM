@@ -69,6 +69,12 @@ textures unshaded. `-translucent` draws spectre/invisibility shadows as
 are disabled by default; translucency builds its palette blend table once
 at startup.
 
+Freelook is off by default; pass `-freelook` to enable it: mouse up/down,
+PgUp/PgDn and End (center) then tilt the view as a horizon shift. It is
+local view state only (demos and netgames are unaffected). Without it the
+mouse moves forward/back as in classic Doom. Add `-invertlook` or set
+mouse_invert_look 1 in default.cfg to invert the vertical mouse axis.
+
 Default controls: W/S move forward/back, A/D strafe, Left/Right arrows turn
 (`,` and `.` also strafe, as in vanilla). Hold Shift to run; with
 `-always-run` you run by default and Shift walks. The WASD keys are the
