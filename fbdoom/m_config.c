@@ -197,6 +197,16 @@ static default_t	doom_defaults_list[] =
     CONFIG_VARIABLE_KEY(key_straferight),
 
     //!
+    // Alternate keyboard keys for forward, backward, strafe left and
+    // strafe right (WASD by default).
+    //
+
+    CONFIG_VARIABLE_KEY(key_up2),
+    CONFIG_VARIABLE_KEY(key_down2),
+    CONFIG_VARIABLE_KEY(key_strafeleft2),
+    CONFIG_VARIABLE_KEY(key_straferight2),
+
+    //!
     // @game strife
     //
     // Keyboard key to use health.

@@ -337,13 +337,16 @@ void G_BuildTiccmd (ticcmd_t* cmd, int maketic)
     strafe = gamekeydown[key_strafe] || mousebuttons[mousebstrafe] 
 	|| joybuttons[joybstrafe]; 
 
-    // fraggle: support the old "joyb_speed = 31" hack which
-    // allowed an autorun effect
+    // -always-run: the speed key (shift) walks instead of running
+    {
+        int speedkey = (key_speed < NUMKEYS && gamekeydown[key_speed])
+                    || (joybspeed < MAX_JOY_BUTTONS && joybuttons[joybspeed]);
+        static int always_run = -1;
 
-    speed = key_speed >= NUMKEYS
-         || joybspeed >= MAX_JOY_BUTTONS
-         || gamekeydown[key_speed] 
-         || joybuttons[joybspeed];
+        if (always_run < 0)
+            always_run = M_CheckParm("-always-run") != 0;
+        speed = always_run ? !speedkey : speedkey;
+    }
  
     forward = side = 0;
     
@@ -393,12 +396,12 @@ void G_BuildTiccmd (ticcmd_t* cmd, int maketic)
 	    cmd->angleturn += angleturn[tspeed]; 
     } 
  
-    if (gamekeydown[key_up]) 
+    if (gamekeydown[key_up] || gamekeydown[key_up2]) 
     {
 	// fprintf(stderr, "up\n");
 	forward += forwardmove[speed]; 
     }
-    if (gamekeydown[key_down]) 
+    if (gamekeydown[key_down] || gamekeydown[key_down2]) 
     {
 	// fprintf(stderr, "down\n");
 	forward -= forwardmove[speed]; 
@@ -410,6 +413,7 @@ void G_BuildTiccmd (ticcmd_t* cmd, int maketic)
         forward -= forwardmove[speed]; 
 
     if (gamekeydown[key_strafeleft]
+     || gamekeydown[key_strafeleft2]
      || joybuttons[joybstrafeleft]
      || mousebuttons[mousebstrafeleft]
      || joystrafemove < 0)
@@ -418,6 +422,7 @@ void G_BuildTiccmd (ticcmd_t* cmd, int maketic)
     }
 
     if (gamekeydown[key_straferight]
+     || gamekeydown[key_straferight2]
      || joybuttons[joybstraferight]
      || mousebuttons[mousebstraferight]
      || joystrafemove > 0)

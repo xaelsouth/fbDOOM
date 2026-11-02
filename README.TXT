@@ -69,6 +69,12 @@ textures unshaded. `-translucent` draws spectre/invisibility shadows as
 are disabled by default; translucency builds its palette blend table once
 at startup.
 
+Default controls: W/S move forward/back, A/D strafe, Left/Right arrows turn
+(`,` and `.` also strafe, as in vanilla). Hold Shift to run; with
+`-always-run` you run by default and Shift walks. The WASD keys are the
+config variables key_up2, key_down2, key_strafeleft2 and key_straferight2
+in default.cfg. Saved config files may override these defaults.
+
 The renderer remains at 320x200; presentation maps it to a corrected 4:3
 display image (320x240) using nearest-neighbor sampling. The default fits
 that image to the output while preserving aspect ratio and centering bars.
@@ -228,8 +234,7 @@ The in-game music volume slider is a linear gain, like the effects slider.
 With music enabled the ALSA buffer is 4 periods deep and the mixer thread asks
 for SCHED_FIFO priority (needs root) to avoid underruns.
 
-The configuration and save directory is /mnt/.fdoom.tar/; sfx_volume and
-music_volume (0-15) in default.cfg are used at startup.
+sfx_volume and music_volume (0-15) in default.cfg are used at startup.
 
 The OPL files (opl.c, opl_queue.c, i_oplmusic.c, midifile.c, mus2mid.c) come
 from Chocolate Doom (GPL).
