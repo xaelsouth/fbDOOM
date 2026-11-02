@@ -1348,6 +1348,7 @@ void D_DoomMain (void)
     }
     
     // init subsystems
+    V_SetResolution();
     DEH_printf("V_Init: allocate screens.\n");
     V_Init ();
 

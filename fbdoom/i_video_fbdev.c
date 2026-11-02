@@ -200,8 +200,8 @@ void I_InitGraphics (void)
             return;
         }
 
-        area_width = SCREENWIDTH * requested_scale;
-        area_height = (SCREENHEIGHT * 6 / 5) * requested_scale;
+        area_width = ORIGWIDTH * requested_scale;
+        area_height = (ORIGHEIGHT * 6 / 5) * requested_scale;
         if (area_width > (int) fb.xres)
         {
             area_width = fb.xres;

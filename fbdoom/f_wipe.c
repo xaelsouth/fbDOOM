@@ -187,7 +187,10 @@ wipe_doMelt
 	    }
 	    else if (y[i] < height)
 	    {
-		dy = (y[i] < 16) ? y[i]+1 : 8;
+		// the melt speed is defined in 200 line units
+		dy = (y[i] < 16 * video_scale)
+		   ? (y[i] / video_scale + 1) * video_scale
+		   : 8 * video_scale;
 		if (y[i]+dy >= height) dy = height - y[i];
 		s = &((short *)wipe_scr_end)[i*height+y[i]];
 		d = &((short *)wipe_scr)[y[i]*width+i];

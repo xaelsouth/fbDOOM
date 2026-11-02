@@ -75,6 +75,11 @@ local view state only (demos and netgames are unaffected). Without it the
 mouse moves forward/back as in classic Doom. Add `-invertlook` or set
 mouse_invert_look 1 in default.cfg to invert the vertical mouse axis.
 
+The internal resolution is 320x200 by default. Pass `-hires` (or
+`-res 640x400`) for a 640x400 frame buffer: finer geometry, same textures
+and sprites scaled up, about 4x the pixel work. `-scale` keeps the same
+window size at either resolution. Hires is untested on the PXP/i.MX23.
+
 Default controls: W/S move forward/back, A/D strafe, Left/Right arrows turn
 (`,` and `.` also strafe, as in vanilla). Hold Shift to run; with
 `-always-run` you run by default and Shift walks. The WASD keys are the

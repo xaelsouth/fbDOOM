@@ -198,8 +198,8 @@ static int 	grid = 0;
 static int 	leveljuststarted = 1; 	// kluge until AM_LevelInit() is called
 
 boolean    	automapactive = false;
-static int 	finit_width = SCREENWIDTH;
-static int 	finit_height = SCREENHEIGHT - 32;
+static int 	finit_width;
+static int 	finit_height;
 
 // location of window on screen
 static int 	f_x;
@@ -520,6 +520,8 @@ void AM_LevelInit(void)
     leveljuststarted = 0;
 
     f_x = f_y = 0;
+    finit_width = SCREENWIDTH;
+    finit_height = SCREENHEIGHT - 32 * video_scale;
     f_w = finit_width;
     f_h = finit_height;
 
@@ -1322,8 +1324,10 @@ void AM_drawMarks(void)
 	    h = 6; // because something's wrong with the wad, i guess
 	    fx = CXMTOF(markpoints[i].x);
 	    fy = CYMTOF(markpoints[i].y);
-	    if (fx >= f_x && fx <= f_w - w && fy >= f_y && fy <= f_h - h)
-		V_DrawPatch(fx, fy, marknums[i]);
+	    // fx and fy are frame buffer pixels, V_DrawPatch wants 320x200 units
+	    if (fx >= f_x && fx <= f_w - w * video_scale
+	     && fy >= f_y && fy <= f_h - h * video_scale)
+		V_DrawPatch(fx / video_scale, fy / video_scale, marknums[i]);
 	}
     }
 

@@ -850,7 +850,7 @@ boolean G_Responder (event_t* ev)
 	if (freelook_enabled)
 	{
 	    // about the same angular rate as horizontal mouse turning
-	    R_AdjustLook((mouse_invert_look ? -mousey : mousey) * 10);
+	    R_AdjustLook((mouse_invert_look ? -mousey : mousey) * 10 * video_scale);
 	    mousey = 0;
 	}
 	return true;    // eat events 

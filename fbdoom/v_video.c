@@ -30,6 +30,7 @@
 #include "deh_str.h"
 #include "i_swap.h"
 #include "i_video.h"
+#include "m_argv.h"
 #include "m_bbox.h"
 #include "m_misc.h"
 #include "v_video.h"
@@ -80,42 +81,45 @@ void V_MarkRect(int x, int y, int width, int height)
  
 
 //
-// V_CopyRect 
-// 
+// V_CopyRect
+// Coordinates and sizes are in logical (320x200) units.
+//
 void V_CopyRect(int srcx, int srcy, byte *source,
                 int width, int height,
                 int destx, int desty)
-{ 
+{
+    const int scale = video_scale;
+    const int stride = SCREENWIDTH;
     byte *src;
-    byte *dest; 
- 
-#ifdef RANGECHECK 
+    byte *dest;
+
+#ifdef RANGECHECK
     if (srcx < 0
-     || srcx + width > SCREENWIDTH
+     || srcx + width > ORIGWIDTH
      || srcy < 0
-     || srcy + height > SCREENHEIGHT 
+     || srcy + height > ORIGHEIGHT
      || destx < 0
-     || destx + width > SCREENWIDTH
+     || destx + width > ORIGWIDTH
      || desty < 0
-     || desty + height > SCREENHEIGHT)
+     || desty + height > ORIGHEIGHT)
     {
         I_Error ("Bad V_CopyRect");
     }
-#endif 
+#endif
 
-    V_MarkRect(destx, desty, width, height); 
- 
-    src = source + SCREENWIDTH * srcy + srcx; 
-    dest = dest_screen + SCREENWIDTH * desty + destx; 
+    V_MarkRect(destx, desty, width, height);
 
-    for ( ; height>0 ; height--) 
-    { 
-        memcpy(dest, src, width); 
-        src += SCREENWIDTH; 
-        dest += SCREENWIDTH; 
-    } 
-} 
- 
+    src = source + stride * srcy * scale + srcx * scale;
+    dest = dest_screen + stride * desty * scale + destx * scale;
+
+    for (height *= scale; height > 0; height--)
+    {
+        memcpy(dest, src, width * scale);
+        src += stride;
+        dest += stride;
+    }
+}
+
 //
 // V_SetPatchClipCallback
 //
@@ -132,12 +136,15 @@ void V_SetPatchClipCallback(vpatchclipfunc_t func)
 }
 
 //
-// V_DrawPatch
-// Masks a column based masked pic to the screen. 
+// DrawPatchScaled
+// Masks a column based masked pic to the screen. Position and patch size
+// are in logical units; every patch pixel becomes a video_scale square.
 //
 
-void V_DrawPatch(int x, int y, patch_t *patch)
-{ 
+static void DrawPatchScaled(int x, int y, patch_t *patch, boolean flipped)
+{
+    const int scale = video_scale;
+    const int stride = SCREENWIDTH;
     int count;
     int col;
     column_t *column;
@@ -145,6 +152,8 @@ void V_DrawPatch(int x, int y, patch_t *patch)
     byte *dest;
     byte *source;
     int w;
+    int sx, sy;
+    byte pixel;
 
     y -= SHORT(patch->topoffset);
     x -= SHORT(patch->leftoffset);
@@ -158,9 +167,9 @@ void V_DrawPatch(int x, int y, patch_t *patch)
 
 #ifdef RANGECHECK
     if (x < 0
-     || x + SHORT(patch->width) > SCREENWIDTH
+     || x + SHORT(patch->width) > ORIGWIDTH
      || y < 0
-     || y + SHORT(patch->height) > SCREENHEIGHT)
+     || y + SHORT(patch->height) > ORIGHEIGHT)
     {
         I_Error("Bad V_DrawPatch x=%i y=%i patch.width=%i patch.height=%i topoffset=%i leftoffset=%i", x, y, patch->width, patch->height, patch->topoffset, patch->leftoffset);
     }
@@ -168,30 +177,54 @@ void V_DrawPatch(int x, int y, patch_t *patch)
 
     V_MarkRect(x, y, SHORT(patch->width), SHORT(patch->height));
 
-    col = 0;
-    desttop = dest_screen + y * SCREENWIDTH + x;
-
     w = SHORT(patch->width);
+    desttop = dest_screen + y * scale * stride + x * scale;
 
-    for ( ; col<w ; x++, col++, desttop++)
+    for (col = 0; col < w; col++, desttop += scale)
     {
-        column = (column_t *)((byte *)patch + LONG(patch->columnofs[col]));
+        column = (column_t *)((byte *)patch
+                              + LONG(patch->columnofs[flipped ? w-1-col : col]));
 
         // step through the posts in a column
         while (column->topdelta != 0xff)
         {
             source = (byte *)column + 3;
-            dest = desttop + column->topdelta*SCREENWIDTH;
+            dest = desttop + column->topdelta * scale * stride;
             count = column->length;
+
+            if (scale == 1)
+            {
+                while (count--)
+                {
+                    *dest = *source++;
+                    dest += stride;
+                }
+                column = (column_t *)((byte *)column + column->length + 4);
+                continue;
+            }
 
             while (count--)
             {
-                *dest = *source++;
-                dest += SCREENWIDTH;
+                pixel = *source++;
+
+                for (sy = 0; sy < scale; sy++)
+                {
+                    for (sx = 0; sx < scale; sx++)
+                    {
+                        dest[sx] = pixel;
+                    }
+
+                    dest += stride;
+                }
             }
             column = (column_t *)((byte *)column + column->length + 4);
         }
     }
+}
+
+void V_DrawPatch(int x, int y, patch_t *patch)
+{
+    DrawPatchScaled(x, y, patch, false);
 }
 
 //
@@ -202,63 +235,8 @@ void V_DrawPatch(int x, int y, patch_t *patch)
 
 void V_DrawPatchFlipped(int x, int y, patch_t *patch)
 {
-    int count;
-    int col; 
-    column_t *column; 
-    byte *desttop;
-    byte *dest;
-    byte *source; 
-    int w; 
- 
-    y -= SHORT(patch->topoffset); 
-    x -= SHORT(patch->leftoffset); 
-
-    // haleyjd 08/28/10: Strife needs silent error checking here.
-    if(patchclip_callback)
-    {
-        if(!patchclip_callback(patch, x, y))
-            return;
-    }
-
-#ifdef RANGECHECK 
-    if (x < 0
-     || x + SHORT(patch->width) > SCREENWIDTH
-     || y < 0
-     || y + SHORT(patch->height) > SCREENHEIGHT)
-    {
-        I_Error("Bad V_DrawPatchFlipped");
-    }
-#endif
-
-    V_MarkRect (x, y, SHORT(patch->width), SHORT(patch->height));
-
-    col = 0;
-    desttop = dest_screen + y * SCREENWIDTH + x;
-
-    w = SHORT(patch->width);
-
-    for ( ; col<w ; x++, col++, desttop++)
-    {
-        column = (column_t *)((byte *)patch + LONG(patch->columnofs[w-1-col]));
-
-        // step through the posts in a column
-        while (column->topdelta != 0xff )
-        {
-            source = (byte *)column + 3;
-            dest = desttop + column->topdelta*SCREENWIDTH;
-            count = column->length;
-
-            while (count--)
-            {
-                *dest = *source++;
-                dest += SCREENWIDTH;
-            }
-            column = (column_t *)((byte *)column + column->length + 4);
-        }
-    }
+    DrawPatchScaled(x, y, patch, true);
 }
-
-
 
 //
 // V_DrawPatchDirect
@@ -588,14 +566,62 @@ void V_DrawBox(int x, int y, int w, int h, int c)
  
 void V_DrawRawScreen(byte *raw)
 {
-    memcpy(dest_screen, raw, SCREENWIDTH * SCREENHEIGHT);
+    const int scale = video_scale;
+    const int stride = SCREENWIDTH;
+    int x, y, sx, sy;
+
+    for (y = 0; y < ORIGHEIGHT; y++)
+    {
+        for (x = 0; x < ORIGWIDTH; x++)
+        {
+            byte *dest = dest_screen + y * scale * stride + x * scale;
+
+            for (sy = 0; sy < scale; sy++)
+            {
+                for (sx = 0; sx < scale; sx++)
+                {
+                    dest[sy * stride + sx] = raw[y * ORIGWIDTH + x];
+                }
+            }
+        }
+    }
+}
+
+int video_scale = 1;
+
+// -hires selects 640x400; -res WxH accepts 320x200 or 640x400.
+void V_SetResolution(void)
+{
+    int p;
+
+    if (M_ParmExists("-hires"))
+    {
+        video_scale = 2;
+    }
+
+    p = M_CheckParmWithArgs("-res", 1);
+
+    if (p > 0)
+    {
+        int w, h;
+
+        if (sscanf(myargv[p + 1], "%dx%d", &w, &h) != 2
+         || w * ORIGHEIGHT != h * ORIGWIDTH
+         || (w != ORIGWIDTH && w != ORIGWIDTH * 2))
+        {
+            I_Error("-res: unsupported resolution '%s' "
+                    "(use 320x200 or 640x400)", myargv[p + 1]);
+        }
+
+        video_scale = w / ORIGWIDTH;
+    }
 }
 
 //
 // V_Init
-// 
-void V_Init (void) 
-{ 
+//
+void V_Init (void)
+{
     // no-op!
     // There used to be separate screens that could be drawn to; these are
     // now handled in the upper layers.

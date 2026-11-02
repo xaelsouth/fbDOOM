@@ -72,8 +72,8 @@ lighttable_t**	spritelights;
 
 // constant arrays
 //  used for psprite clipping and initializing clipping
-short		negonearray[SCREENWIDTH];
-short		screenheightarray[SCREENWIDTH];
+short		negonearray[MAXSCREENWIDTH];
+short		screenheightarray[MAXSCREENWIDTH];
 
 
 //
@@ -856,8 +856,8 @@ void R_SortVisSprites (void)
 //
 // R_DrawSprite
 //
-static short		clipbot[SCREENWIDTH];
-static short		cliptop[SCREENWIDTH];
+static short		clipbot[MAXSCREENWIDTH];
+static short		cliptop[MAXSCREENWIDTH];
 void R_DrawSprite (vissprite_t* spr)
 {
     drawseg_t*		ds;

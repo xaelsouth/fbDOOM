@@ -22,6 +22,7 @@
 
 #include "d_player.h"
 #include "r_data.h"
+#include "i_video.h"
 
 
 
@@ -62,7 +63,9 @@ extern int		loopcount;
 #define LIGHTSEGSHIFT	         4
 
 #define MAXLIGHTSCALE		48
-#define LIGHTSCALESHIFT		12
+// Wall and sprite scales grow with the internal resolution, so the shift
+// grows with it to keep the light table indices the same.
+#define LIGHTSCALESHIFT		(11 + video_scale)
 #define MAXLIGHTZ	       128
 #define LIGHTZSHIFT		20
 

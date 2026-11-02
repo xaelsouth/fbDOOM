@@ -24,8 +24,26 @@
 
 // Screen width and height.
 
-#define SCREENWIDTH  320
-#define SCREENHEIGHT 200
+// Logical (original Doom) screen size. Game layers such as the menu, status
+// bar and HUD position everything in these units; the V_* drawing functions
+// scale them up when the internal resolution is higher.
+#define ORIGWIDTH  320
+#define ORIGHEIGHT 200
+
+// Largest supported internal resolution (2x).
+#define MAXSCREENWIDTH  (ORIGWIDTH * 2)
+#define MAXSCREENHEIGHT (ORIGHEIGHT * 2)
+
+// Internal resolution multiplier: 1 (320x200) or 2 (640x400), chosen at
+// launch with -hires or -res.
+extern int video_scale;
+
+// Physical size of the frame buffer in pixels.
+#define SCREENWIDTH  (ORIGWIDTH * video_scale)
+#define SCREENHEIGHT (ORIGHEIGHT * video_scale)
+
+// Parses the resolution command line options. Call once, early.
+void V_SetResolution(void);
 
 // Screen width used for "squash" scale functions
 

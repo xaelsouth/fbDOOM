@@ -28,6 +28,12 @@
 #include "m_argv.h"
 #include "z_zone.h"
 
+// These software scalers only handle the original 320x200 frame.
+#undef SCREENWIDTH
+#undef SCREENHEIGHT
+#define SCREENWIDTH ORIGWIDTH
+#define SCREENHEIGHT ORIGHEIGHT
+
 #if defined(_MSC_VER) && !defined(__cplusplus)
 #define inline __inline
 #endif

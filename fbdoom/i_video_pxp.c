@@ -114,20 +114,22 @@ void I_PXP_SetPalette(const byte *rgb)
     }
 }
 
-void I_PXP_ConvertFrame(const byte *indexed, byte *yuv, int canvas_width)
+static inline __attribute__((always_inline))
+void convert_frame(const byte *indexed, byte *yuv, int canvas_width,
+                   const int width, const int height)
 {
-    const int margin = (canvas_width - SCREENWIDTH) / 2;
+    const int margin = (canvas_width - width) / 2;
     uint8_t *yplane = yuv;
     uint16_t *uplane, *vplane;
     int cw = canvas_width / 2;
     int x, y;
 
-    uplane = (uint16_t *) (yuv + canvas_width * SCREENHEIGHT);
-    vplane = (uint16_t *) ((uint8_t *) uplane + cw * (SCREENHEIGHT / 2));
+    uplane = (uint16_t *) (yuv + canvas_width * height);
+    vplane = (uint16_t *) ((uint8_t *) uplane + cw * (height / 2));
 
-    for (y = 0; y < SCREENHEIGHT; y++)
+    for (y = 0; y < height; y++)
     {
-        const uint8_t *s = indexed + y * SCREENWIDTH;
+        const uint8_t *s = indexed + y * width;
         uint32_t *yd = (uint32_t *) (yplane + y * canvas_width + margin);
         uint16_t *ud = NULL, *vd = NULL;
 
@@ -137,7 +139,7 @@ void I_PXP_ConvertFrame(const byte *indexed, byte *yuv, int canvas_width)
             vd = vplane + ((y / 2) * cw + margin / 2) / 2;
         }
 
-        for (x = 0; x < SCREENWIDTH; x += 4)
+        for (x = 0; x < width; x += 4)
         {
             uint32_t p0 = palette_yuv[s[x]];
             uint32_t p1 = palette_yuv[s[x + 1]];
@@ -159,6 +161,16 @@ void I_PXP_ConvertFrame(const byte *indexed, byte *yuv, int canvas_width)
             }
         }
     }
+}
+
+// Instantiated with constant sizes for the default 320x200 mode: with a
+// runtime width the inner loop runs out of registers on the ARM926.
+void I_PXP_ConvertFrame(const byte *indexed, byte *yuv, int canvas_width)
+{
+    if (video_scale == 1)
+        convert_frame(indexed, yuv, canvas_width, ORIGWIDTH, ORIGHEIGHT);
+    else
+        convert_frame(indexed, yuv, canvas_width, SCREENWIDTH, SCREENHEIGHT);
 }
 
 static int xioctl(int fd, unsigned long req, void *arg)

@@ -49,7 +49,7 @@ visplane_t*		floorplane;
 visplane_t*		ceilingplane;
 
 // ?
-#define MAXOPENINGS	SCREENWIDTH*64
+#define MAXOPENINGS	MAXSCREENWIDTH*64
 short			openings[MAXOPENINGS];
 short*			lastopening;
 
@@ -59,15 +59,15 @@ short*			lastopening;
 //  floorclip starts out SCREENHEIGHT
 //  ceilingclip starts out -1
 //
-short			floorclip[SCREENWIDTH];
-short			ceilingclip[SCREENWIDTH];
+short			floorclip[MAXSCREENWIDTH];
+short			ceilingclip[MAXSCREENWIDTH];
 
 //
 // spanstart holds the start of a plane span
 // initialized to 0 at start
 //
-int			spanstart[SCREENHEIGHT];
-int			spanstop[SCREENHEIGHT];
+int			spanstart[MAXSCREENHEIGHT];
+int			spanstop[MAXSCREENHEIGHT];
 
 //
 // texture mapping
@@ -75,15 +75,15 @@ int			spanstop[SCREENHEIGHT];
 lighttable_t**		planezlight;
 fixed_t			planeheight;
 
-fixed_t			yslope[SCREENHEIGHT];
-fixed_t			distscale[SCREENWIDTH];
+fixed_t			yslope[MAXSCREENHEIGHT];
+fixed_t			distscale[MAXSCREENWIDTH];
 fixed_t			basexscale;
 fixed_t			baseyscale;
 
-fixed_t			cachedheight[SCREENHEIGHT];
-fixed_t			cacheddistance[SCREENHEIGHT];
-fixed_t			cachedxstep[SCREENHEIGHT];
-fixed_t			cachedystep[SCREENHEIGHT];
+fixed_t			cachedheight[MAXSCREENHEIGHT];
+fixed_t			cacheddistance[MAXSCREENHEIGHT];
+fixed_t			cachedxstep[MAXSCREENHEIGHT];
+fixed_t			cachedystep[MAXSCREENHEIGHT];
 
 
 
@@ -191,7 +191,7 @@ void R_ClearPlanes (void)
     lastopening = openings;
     
     // texture calculation
-    memset (cachedheight, 0, sizeof(cachedheight));
+    memset (cachedheight, 0, SCREENHEIGHT*sizeof(cachedheight[0]));
 
     // left to right mapping
     angle = (viewangle-ANG90)>>ANGLETOFINESHIFT;
@@ -246,7 +246,7 @@ R_FindPlane
     check->minx = SCREENWIDTH;
     check->maxx = -1;
     
-    memset (check->top,0xff,sizeof(check->top));
+    memset (check->top,0xff,SCREENWIDTH*sizeof(check->top[0]));
 		
     return check;
 }
@@ -290,7 +290,7 @@ R_CheckPlane
     }
 
     for (x=intrl ; x<= intrh ; x++)
-	if (pl->top[x] != 0xff)
+	if (pl->top[x] != 0xffff)
 	    break;
 
     if (x > intrh)
@@ -311,7 +311,7 @@ R_CheckPlane
     pl->minx = start;
     pl->maxx = stop;
 
-    memset (pl->top,0xff,sizeof(pl->top));
+    memset (pl->top,0xff,SCREENWIDTH*sizeof(pl->top[0]));
 		
     return pl;
 }
@@ -428,8 +428,8 @@ void R_DrawPlanes (void)
 
 	planezlight = zlight[light];
 
-	pl->top[pl->maxx+1] = 0xff;
-	pl->top[pl->minx-1] = 0xff;
+	pl->top[pl->maxx+1] = 0xffff;
+	pl->top[pl->minx-1] = 0xffff;
 		
 	stop = pl->maxx + 1;
 

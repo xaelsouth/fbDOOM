@@ -68,8 +68,8 @@ static unsigned long green_max;
 static unsigned long blue_max;
 
 byte *I_VideoBuffer;
-int screen_width = SCREENWIDTH;
-int screen_height = SCREENHEIGHT;
+int screen_width = ORIGWIDTH;
+int screen_height = ORIGHEIGHT;
 int screen_bpp;
 int usemouse = 1;
 int fullscreen;
@@ -663,8 +663,8 @@ void I_InitGraphics(void)
         scale_factor = requested_scale;
     }
 
-    window_width = SCREENWIDTH * scale_factor;
-    window_height = (SCREENHEIGHT * 6 / 5) * scale_factor;
+    window_width = ORIGWIDTH * scale_factor;
+    window_height = (ORIGHEIGHT * 6 / 5) * scale_factor;
     if (fullscreen_requested)
     {
         window_width = DisplayWidth(display, screen);

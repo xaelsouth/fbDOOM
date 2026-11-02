@@ -44,7 +44,7 @@
 #define MAXHEIGHT			832
 
 // status bar height at bottom of screen
-#define SBARHEIGHT		32
+#define SBARHEIGHT		(32 * video_scale)
 
 //
 // All drawing to the view buffer is accomplished in this file.
@@ -181,7 +181,20 @@ int			dccount;
 // Thus a special case loop for very fast rendering can
 //  be used. It has also been used with Wolfenstein 3D.
 // 
-void R_DrawColumn (void) 
+
+// The drawers are instantiated twice with a constant stride so the default
+// 320 wide mode keeps immediate store offsets and spends no registers on
+// runtime strides.
+#define DRAWER_DISPATCH(name) \
+void name (void) \
+{ \
+    if (video_scale == 1) \
+	name##_impl(ORIGWIDTH); \
+    else \
+	name##_impl(SCREENWIDTH); \
+}
+
+static inline __attribute__((always_inline)) void R_DrawColumn_impl (const int stride)
 { 
     int			count; 
     byte*		dest; 
@@ -196,7 +209,7 @@ void R_DrawColumn (void)
 	return; 
 				 
 #ifdef RANGECHECK 
-    if ((unsigned)dc_x >= SCREENWIDTH
+    if ((unsigned)dc_x >= stride
 	|| dc_yl < 0
 	|| dc_yh >= SCREENHEIGHT) 
 	I_Error ("R_DrawColumn: %i to %i at %i", dc_yl, dc_yh, dc_x); 
@@ -221,7 +234,7 @@ void R_DrawColumn (void)
 	{
 	    source = dc_source[(frac >> FRACBITS) & 127];
 	    *dest = dc_brightmap[source] ? source : dc_colormap[source];
-	    dest += SCREENWIDTH;
+	    dest += stride;
 	    frac += fracstep;
 	} while (count--);
     }
@@ -241,29 +254,30 @@ void R_DrawColumn (void)
 	    byte p3 = colormap[src[((frac + 3 * fracstep) >> FRACBITS) & 127]];
 
 	    dest[0] = p0;
-	    dest[SCREENWIDTH] = p1;
-	    dest[SCREENWIDTH * 2] = p2;
-	    dest[SCREENWIDTH * 3] = p3;
-	    dest += SCREENWIDTH * 4;
+	    dest[stride] = p1;
+	    dest[stride * 2] = p2;
+	    dest[stride * 3] = p3;
+	    dest += stride * 4;
 	    frac += 4 * fracstep;
 	    count -= 4;
 	}
 	while (count-- > 0)
 	{
 	    *dest = colormap[src[(frac >> FRACBITS) & 127]];
-	    dest += SCREENWIDTH;
+	    dest += stride;
 	    frac += fracstep;
 	}
     }
 } 
 
-
+DRAWER_DISPATCH(R_DrawColumn)
 
 // UNUSED.
 // Loop unrolled.
 #if 0
 void R_DrawColumn (void) 
 { 
+    const int stride = SCREENWIDTH;
     int			count; 
     byte*		source;
     byte*		dest;
@@ -291,26 +305,26 @@ void R_DrawColumn (void)
     while (count >= 8) 
     { 
 	dest[0] = colormap[source[frac>>25]]; 
-	dest[SCREENWIDTH] = colormap[source[(frac+fracstep)>>25]]; 
-	dest[SCREENWIDTH*2] = colormap[source[(frac+fracstep2)>>25]]; 
-	dest[SCREENWIDTH*3] = colormap[source[(frac+fracstep3)>>25]];
+	dest[stride] = colormap[source[(frac+fracstep)>>25]]; 
+	dest[stride*2] = colormap[source[(frac+fracstep2)>>25]]; 
+	dest[stride*3] = colormap[source[(frac+fracstep3)>>25]];
 	
 	frac += fracstep4; 
 
-	dest[SCREENWIDTH*4] = colormap[source[frac>>25]]; 
-	dest[SCREENWIDTH*5] = colormap[source[(frac+fracstep)>>25]]; 
-	dest[SCREENWIDTH*6] = colormap[source[(frac+fracstep2)>>25]]; 
-	dest[SCREENWIDTH*7] = colormap[source[(frac+fracstep3)>>25]]; 
+	dest[stride*4] = colormap[source[frac>>25]]; 
+	dest[stride*5] = colormap[source[(frac+fracstep)>>25]]; 
+	dest[stride*6] = colormap[source[(frac+fracstep2)>>25]]; 
+	dest[stride*7] = colormap[source[(frac+fracstep3)>>25]]; 
 
 	frac += fracstep4; 
-	dest += SCREENWIDTH*8; 
+	dest += stride*8; 
 	count -= 8;
     } 
 	
     while (count > 0)
     { 
 	*dest = colormap[source[frac>>25]]; 
-	dest += SCREENWIDTH; 
+	dest += stride; 
 	frac += fracstep; 
 	count--;
     } 
@@ -320,6 +334,7 @@ void R_DrawColumn (void)
 
 void R_DrawColumnLow (void) 
 { 
+    const int stride = SCREENWIDTH;
     int			count; 
     byte*		dest; 
     byte*		dest2;
@@ -334,7 +349,7 @@ void R_DrawColumnLow (void)
 	return; 
 				 
 #ifdef RANGECHECK 
-    if ((unsigned)dc_x >= SCREENWIDTH
+    if ((unsigned)dc_x >= stride
 	|| dc_yl < 0
 	|| dc_yh >= SCREENHEIGHT)
     {
@@ -359,8 +374,8 @@ void R_DrawColumnLow (void)
 	    byte source = dc_source[(frac >> FRACBITS) & 127];
 	    byte pixel = dc_brightmap[source] ? source : dc_colormap[source];
 	    *dest2 = *dest = pixel;
-	    dest += SCREENWIDTH;
-	    dest2 += SCREENWIDTH;
+	    dest += stride;
+	    dest2 += stride;
 	    frac += fracstep;
 	} while (count--);
     }
@@ -376,9 +391,9 @@ void R_DrawColumnLow (void)
 	    byte p1 = colormap[src[((frac + fracstep) >> FRACBITS) & 127]];
 
 	    dest[0] = dest2[0] = p0;
-	    dest[SCREENWIDTH] = dest2[SCREENWIDTH] = p1;
-	    dest += SCREENWIDTH * 2;
-	    dest2 += SCREENWIDTH * 2;
+	    dest[stride] = dest2[stride] = p1;
+	    dest += stride * 2;
+	    dest2 += stride * 2;
 	    frac += 2 * fracstep;
 	    count -= 2;
 	}
@@ -389,6 +404,7 @@ void R_DrawColumnLow (void)
 
 void R_DrawTranslucentColumn (void)
 {
+    const int stride = SCREENWIDTH;
     int count = dc_yh - dc_yl;
     byte *dest;
     fixed_t frac;
@@ -404,13 +420,14 @@ void R_DrawTranslucentColumn (void)
     {
 	byte source = dc_colormap[dc_source[(frac >> FRACBITS) & 127]];
 	*dest = translucency_map[(source << 8) | *dest];
-	dest += SCREENWIDTH;
+	dest += stride;
 	frac += fracstep;
     } while (count--);
 }
 
 void R_DrawTranslucentColumnLow (void)
 {
+    const int stride = SCREENWIDTH;
     int count = dc_yh - dc_yl;
     int x = dc_x << 1;
     byte *dest;
@@ -430,8 +447,8 @@ void R_DrawTranslucentColumnLow (void)
 	byte source = dc_colormap[dc_source[(frac >> FRACBITS) & 127]];
 	*dest = translucency_map[(source << 8) | *dest];
 	*dest2 = translucency_map[(source << 8) | *dest2];
-	dest += SCREENWIDTH;
-	dest2 += SCREENWIDTH;
+	dest += stride;
+	dest2 += stride;
 	frac += fracstep;
     } while (count--);
 }
@@ -441,7 +458,7 @@ void R_DrawTranslucentColumnLow (void)
 // Spectre/Invisibility.
 //
 #define FUZZTABLE		50 
-#define FUZZOFF	(SCREENWIDTH)
+#define FUZZOFF	1
 
 
 int	fuzzoffset[FUZZTABLE] =
@@ -466,7 +483,7 @@ int	fuzzpos = 0;
 //  could create the SHADOW effect,
 //  i.e. spectres and invisible players.
 //
-void R_DrawFuzzColumn (void) 
+static inline __attribute__((always_inline)) void R_DrawFuzzColumn_impl (const int stride)
 { 
     int			count; 
     byte*		dest; 
@@ -488,7 +505,7 @@ void R_DrawFuzzColumn (void)
 	return; 
 
 #ifdef RANGECHECK 
-    if ((unsigned)dc_x >= SCREENWIDTH
+    if ((unsigned)dc_x >= stride
 	|| dc_yl < 0 || dc_yh >= SCREENHEIGHT)
     {
 	I_Error ("R_DrawFuzzColumn: %i to %i at %i",
@@ -511,22 +528,25 @@ void R_DrawFuzzColumn (void)
 	//  a pixel that is either one column
 	//  left or right of the current one.
 	// Add index from colormap to index.
-	*dest = colormaps[6*256+dest[fuzzoffset[fuzzpos]]]; 
+	*dest = colormaps[6*256+dest[fuzzoffset[fuzzpos] * stride]]; 
 
 	// Clamp table lookup index.
 	if (++fuzzpos == FUZZTABLE) 
 	    fuzzpos = 0;
 	
-	dest += SCREENWIDTH;
+	dest += stride;
 
 	frac += fracstep; 
     } while (count--); 
 } 
 
+DRAWER_DISPATCH(R_DrawFuzzColumn)
+
 // low detail mode version
  
 void R_DrawFuzzColumnLow (void) 
 { 
+    const int stride = SCREENWIDTH;
     int			count; 
     byte*		dest; 
     byte*		dest2; 
@@ -553,7 +573,7 @@ void R_DrawFuzzColumnLow (void)
     x = dc_x << 1;
     
 #ifdef RANGECHECK 
-    if ((unsigned)x >= SCREENWIDTH
+    if ((unsigned)x >= stride
 	|| dc_yl < 0 || dc_yh >= SCREENHEIGHT)
     {
 	I_Error ("R_DrawFuzzColumn: %i to %i at %i",
@@ -577,15 +597,15 @@ void R_DrawFuzzColumnLow (void)
 	//  a pixel that is either one column
 	//  left or right of the current one.
 	// Add index from colormap to index.
-	*dest = colormaps[6*256+dest[fuzzoffset[fuzzpos]]]; 
-	*dest2 = colormaps[6*256+dest2[fuzzoffset[fuzzpos]]]; 
+	*dest = colormaps[6*256+dest[fuzzoffset[fuzzpos] * stride]]; 
+	*dest2 = colormaps[6*256+dest2[fuzzoffset[fuzzpos] * stride]]; 
 
 	// Clamp table lookup index.
 	if (++fuzzpos == FUZZTABLE) 
 	    fuzzpos = 0;
 	
-	dest += SCREENWIDTH;
-	dest2 += SCREENWIDTH;
+	dest += stride;
+	dest2 += stride;
 
 	frac += fracstep; 
     } while (count--); 
@@ -609,6 +629,7 @@ byte*	translationtables;
 
 void R_DrawTranslatedColumn (void) 
 { 
+    const int stride = SCREENWIDTH;
     int			count; 
     byte*		dest; 
     fixed_t		frac;
@@ -619,7 +640,7 @@ void R_DrawTranslatedColumn (void)
 	return; 
 				 
 #ifdef RANGECHECK 
-    if ((unsigned)dc_x >= SCREENWIDTH
+    if ((unsigned)dc_x >= stride
 	|| dc_yl < 0
 	|| dc_yh >= SCREENHEIGHT)
     {
@@ -645,7 +666,7 @@ void R_DrawTranslatedColumn (void)
 	// Thus the "green" ramp of the player 0 sprite
 	//  is mapped to gray, red, black/indigo. 
 	*dest = dc_colormap[dc_translation[dc_source[frac>>FRACBITS]]];
-	dest += SCREENWIDTH;
+	dest += stride;
 	
 	frac += fracstep; 
     } while (count--); 
@@ -653,6 +674,7 @@ void R_DrawTranslatedColumn (void)
 
 void R_DrawTranslatedColumnLow (void) 
 { 
+    const int stride = SCREENWIDTH;
     int			count; 
     byte*		dest; 
     byte*		dest2; 
@@ -668,7 +690,7 @@ void R_DrawTranslatedColumnLow (void)
     x = dc_x << 1;
 				 
 #ifdef RANGECHECK 
-    if ((unsigned)x >= SCREENWIDTH
+    if ((unsigned)x >= stride
 	|| dc_yl < 0
 	|| dc_yh >= SCREENHEIGHT)
     {
@@ -696,8 +718,8 @@ void R_DrawTranslatedColumnLow (void)
 	//  is mapped to gray, red, black/indigo. 
 	*dest = dc_colormap[dc_translation[dc_source[frac>>FRACBITS]]];
 	*dest2 = dc_colormap[dc_translation[dc_source[frac>>FRACBITS]]];
-	dest += SCREENWIDTH;
-	dest2 += SCREENWIDTH;
+	dest += stride;
+	dest2 += stride;
 	
 	frac += fracstep; 
     } while (count--); 
@@ -1035,6 +1057,7 @@ void R_FillBackScreen (void)
     byte*	dest; 
     int		x;
     int		y; 
+    int		vx, vy, vw, vh;
     patch_t*	patch;
 
     // DOOM border patch.
@@ -1075,57 +1098,57 @@ void R_FillBackScreen (void)
     src = W_CacheLumpName(name, PU_CACHE); 
     dest = background_buffer;
 	 
-    for (y=0 ; y<SCREENHEIGHT-SBARHEIGHT ; y++) 
-    { 
-	for (x=0 ; x<SCREENWIDTH/64 ; x++) 
-	{ 
-	    memcpy (dest, src+((y&63)<<6), 64); 
-	    dest += 64; 
-	} 
+    // The 64x64 flat is tiled; each flat pixel covers video_scale pixels.
+    for (y=0 ; y<SCREENHEIGHT-SBARHEIGHT ; y++)
+    {
+	byte *row = src + (((y/video_scale)&63)<<6);
 
-	if (SCREENWIDTH&63) 
-	{ 
-	    memcpy (dest, src+((y&63)<<6), SCREENWIDTH&63); 
-	    dest += (SCREENWIDTH&63); 
-	} 
-    } 
-     
+	for (x=0 ; x<SCREENWIDTH ; x++)
+	    *dest++ = row[(x/video_scale)&63];
+    }
+
     // Draw screen and bezel; this is done to a separate screen buffer.
 
     V_UseBuffer(background_buffer);
 
+    // V_DrawPatch takes logical (320x200) coordinates
+    vx = viewwindowx / video_scale;
+    vy = viewwindowy / video_scale;
+    vw = scaledviewwidth / video_scale;
+    vh = viewheight / video_scale;
+
     patch = W_CacheLumpName(DEH_String("brdr_t"),PU_CACHE);
 
-    for (x=0 ; x<scaledviewwidth ; x+=8)
-	V_DrawPatch(viewwindowx+x, viewwindowy-8, patch);
+    for (x=0 ; x<vw ; x+=8)
+	V_DrawPatch(vx+x, vy-8, patch);
     patch = W_CacheLumpName(DEH_String("brdr_b"),PU_CACHE);
 
-    for (x=0 ; x<scaledviewwidth ; x+=8)
-	V_DrawPatch(viewwindowx+x, viewwindowy+viewheight, patch);
+    for (x=0 ; x<vw ; x+=8)
+	V_DrawPatch(vx+x, vy+vh, patch);
     patch = W_CacheLumpName(DEH_String("brdr_l"),PU_CACHE);
 
-    for (y=0 ; y<viewheight ; y+=8)
-	V_DrawPatch(viewwindowx-8, viewwindowy+y, patch);
+    for (y=0 ; y<vh ; y+=8)
+	V_DrawPatch(vx-8, vy+y, patch);
     patch = W_CacheLumpName(DEH_String("brdr_r"),PU_CACHE);
 
-    for (y=0 ; y<viewheight ; y+=8)
-	V_DrawPatch(viewwindowx+scaledviewwidth, viewwindowy+y, patch);
+    for (y=0 ; y<vh ; y+=8)
+	V_DrawPatch(vx+vw, vy+y, patch);
 
-    // Draw beveled edge. 
-    V_DrawPatch(viewwindowx-8,
-                viewwindowy-8,
+    // Draw beveled edge.
+    V_DrawPatch(vx-8,
+                vy-8,
                 W_CacheLumpName(DEH_String("brdr_tl"),PU_CACHE));
-    
-    V_DrawPatch(viewwindowx+scaledviewwidth,
-                viewwindowy-8,
+
+    V_DrawPatch(vx+vw,
+                vy-8,
                 W_CacheLumpName(DEH_String("brdr_tr"),PU_CACHE));
-    
-    V_DrawPatch(viewwindowx-8,
-                viewwindowy+viewheight,
+
+    V_DrawPatch(vx-8,
+                vy+vh,
                 W_CacheLumpName(DEH_String("brdr_bl"),PU_CACHE));
-    
-    V_DrawPatch(viewwindowx+scaledviewwidth,
-                viewwindowy+viewheight,
+
+    V_DrawPatch(vx+vw,
+                vy+vh,
                 W_CacheLumpName(DEH_String("brdr_br"),PU_CACHE));
 
     V_RestoreBuffer();
